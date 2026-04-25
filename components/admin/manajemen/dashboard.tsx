@@ -9,14 +9,14 @@ const ProductTable = lazy(() => import("../barang/productTable"));
 
 export default function Dashboard({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: any }) {
   return (
-    // Hapus div flex luar, langsung mainkan paddingnya di sini
+    <>
     <div className="p-8 md:p-12 w-full">
-      <motion.div
+      {/* <motion.div
         key={activeTab}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-      >
+        > */}
         <Suspense fallback={<LoadingScreen />}>
           
           {activeTab === 'dashboard' && (
@@ -71,7 +71,8 @@ export default function Dashboard({ activeTab, setActiveTab }: { activeTab: stri
           )}
 
         </Suspense>
-      </motion.div>
+      {/* </motion.div> */}
     </div>
+    </>
   );
 }

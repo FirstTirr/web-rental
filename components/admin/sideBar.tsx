@@ -7,9 +7,9 @@ const menuItems = [
   { id: 'dashboard', label: "Dashboard", path: "/admin" },
   { id: 'barang', label: "CRUD Barang", path: "/admin/barang" },
   { id: 'rekap', label: "Rekap Penjualan", path: "/admin/rekap" },
-  { id: 'pesanan', label: "Log Pesanan", path: "/admin/pesanan" },
-  { id: 'konfirmasi', label: "Konfirmasi Pembayaran", path: "/admin/konfirmasiPembayaran" },
-  { id: 'validasi', label: "Validasi Pesanan", path: "/admin/validasiPesanan" },
+  { id: 'pesanan', label: "Log Pesanan", path: "/admin/log-pesanan" },
+  { id: 'konfirmasi', label: "Konfirmasi Pembayaran", path: "/admin/pembayaran-page" },
+  { id: 'validasi', label: "Validasi Pesanan", path: "/admin/validasi" },
 ];
 
 export default function SideBar() {

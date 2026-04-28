@@ -7,9 +7,9 @@ export default function StatCard({ label, value, color = "text-slate-900" }: {
   color?: string 
 }) {
   return (
-    <article className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-gray-700">
+    <article className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm text-gray-700">
       <p className="text-sm text-slate-500 font-medium mb-1">{label}</p>
-      <h2 className={`text-2xl font-bold ${color}`}>{value}</h2>
+      <h2 className={`text-xl sm:text-2xl font-bold break-words ${color}`}>{value}</h2>
     </article>
   );
 }

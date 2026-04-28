@@ -1,6 +1,23 @@
+"use client";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Nav } from "../../components/nav";
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [isAllowed, setIsAllowed] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+    setIsAllowed(true);
+  }, [router]);
+
+  if (!isAllowed) return null;
+
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-x-clip text-slate-900">
       {/* Dekorasi Konsisten */}

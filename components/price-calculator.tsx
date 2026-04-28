@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
@@ -10,10 +10,61 @@ const MapPicker = dynamic(() => import("./map-picker"), {
   loading: () => <div className="h-[200px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 border border-slate-200">Memuat Peta Interaktif...</div> 
 });
 
+type ProfileApiResult = {
+  data?: {
+    address?: string;
+  };
+  error?: string;
+};
+
+type CreateRentalApiResult = {
+  data?: Record<string, unknown>;
+  message?: string;
+  error?: string;
+};
+
+const PROFILE_ENDPOINT_CANDIDATES = [
+  "/api/users/profile",
+  "/api/profile",
+  "/api/users/profile",
+  "/api/users/me",
+];
+
+const CREATE_RENTAL_ENDPOINT_CANDIDATES = ["/api/rentals"];
+
+async function parseProfileResult(response: Response): Promise<ProfileApiResult> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as ProfileApiResult;
+  }
+
+  const rawText = await response.text();
+  return {
+    error: rawText?.trim() || `Request gagal dengan status ${response.status}`,
+  };
+}
+
+async function parseCreateRentalResult(response: Response): Promise<CreateRentalApiResult> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as CreateRentalApiResult;
+  }
+
+  const rawText = await response.text();
+  return {
+    error: rawText?.trim() || `Request gagal dengan status ${response.status}`,
+  };
+}
+
 export function Calculator({ pricePerDay, productName = "Produk", productImage = "", productId = "0" }: { pricePerDay: number, productName?: string, productImage?: string, productId?: string }) {
   const router = useRouter();
   const [days, setDays] = useState<number>(1);
   const [address, setAddress] = useState<string>("");
+  const profileEndpointRef = useRef<string>(PROFILE_ENDPOINT_CANDIDATES[0]);
+  const [minStartDate] = useState<string>(() => {
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    return new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
+  });
   const [startDate, setStartDate] = useState<string>(() => {
     // Default: Hari ini
     const tzOffset = new Date().getTimezoneOffset() * 60000;
@@ -50,10 +101,158 @@ export function Calculator({ pricePerDay, productName = "Produk", productImage =
   };
 
   const [showModal, setShowModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function toIdr(num: number) {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
   }
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchUserAddress = async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (!apiUrl) return;
+
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const endpoints = [
+        profileEndpointRef.current,
+        ...PROFILE_ENDPOINT_CANDIDATES.filter((endpoint) => endpoint !== profileEndpointRef.current),
+      ];
+
+      for (const endpoint of endpoints) {
+        const response = await fetch(`${apiUrl}${endpoint}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const result = await parseProfileResult(response);
+
+        if (response.status === 404) {
+          continue;
+        }
+
+        if (!response.ok) {
+          return;
+        }
+
+        profileEndpointRef.current = endpoint;
+        const userAddress = result?.data?.address?.trim() || "";
+        if (!isCancelled && userAddress) {
+          setAddress((prev) => (prev.trim() ? prev : userAddress));
+        }
+        return;
+      }
+    };
+
+    fetchUserAddress();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const toApiDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+
+  const createRental = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const token = localStorage.getItem("token");
+
+    if (!address.trim()) {
+      alert("Alamat wajib diisi.");
+      return;
+    }
+
+    if (!apiUrl) {
+      alert("Konfigurasi backend belum tersedia.");
+      return;
+    }
+
+    const payload = {
+      product_id: Number(productId),
+      start_date: toApiDate(startDate),
+      end_date: toApiDate(new Date(endDate.getTime()).toISOString().slice(0, 10)),
+    };
+
+    setIsSubmitting(true);
+    try {
+      const endpoints = CREATE_RENTAL_ENDPOINT_CANDIDATES;
+      let lastResponse: Response | null = null;
+      let lastResult: CreateRentalApiResult = {};
+
+      for (const endpoint of endpoints) {
+        const response = await fetch(`${apiUrl}${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const result = await parseCreateRentalResult(response);
+        lastResponse = response;
+        lastResult = result;
+
+        if (response.status === 404 || response.status === 405) {
+          continue;
+        }
+
+        if (!response.ok) {
+          throw new Error(String(result?.error || "Gagal membuat pesanan."));
+        }
+
+        setShowModal(false);
+        router.push("/user/pesanan");
+        return;
+      }
+
+      // Fallback lokal jika backend belum menyediakan route yang cocok.
+      if (lastResponse && (lastResponse.status === 404 || lastResponse.status === 405)) {
+        const prevOrders = localStorage.getItem("rental_orders");
+        const orders = prevOrders ? JSON.parse(prevOrders) : [];
+
+        const newOrder = {
+          id: Math.random().toString(36).substring(2, 9).toUpperCase(),
+          productId,
+          productName,
+          productImage,
+          days,
+          startDate: formatDate(startD),
+          endDate: formatDate(endDate),
+          address,
+          total: finalTotal,
+          status: "Menunggu Konfirmasi",
+          approvalStatus: "pending",
+          paymentStatus: "unpaid",
+          createdAt: Date.now(),
+        };
+
+        orders.push(newOrder);
+        localStorage.setItem("rental_orders", JSON.stringify(orders));
+        setShowModal(false);
+        router.push("/user/pesanan");
+        return;
+      }
+
+      throw new Error(String(lastResult?.error || "Gagal membuat pesanan."));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Gagal membuat pesanan.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="my-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -82,7 +281,7 @@ export function Calculator({ pricePerDay, productName = "Produk", productImage =
             id="mulaiPinjam"
             value={startDate} 
             onChange={(e) => setStartDate(e.target.value)}
-            min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+            min={minStartDate}
             className="mt-1 w-full flex-1 appearance-none rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
           />
         </div>
@@ -93,6 +292,9 @@ export function Calculator({ pricePerDay, productName = "Produk", productImage =
       </div>
 
       <div className="mt-6 space-y-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+        <div className="flex justify-between border-b border-slate-200 pb-2">
+          <span>stock</span>
+        </div>
         <div className="flex justify-between border-b border-slate-200 pb-2">
           <span>Harga Dasar ({days} hari)</span>
           <span className="font-semibold">{toIdr(baseTotal)}</span>
@@ -187,37 +389,10 @@ export function Calculator({ pricePerDay, productName = "Produk", productImage =
               </button>
               <button 
                 disabled={!address}
-                onClick={() => {
-                  // Simpan ke local storage
-                  const prevOrders = localStorage.getItem("rental_orders");
-                  const orders = prevOrders ? JSON.parse(prevOrders) : [];
-                  
-                  const newOrder = {
-                    id: Math.random().toString(36).substring(2, 9).toUpperCase(),
-                    productId,
-                    productName,
-                    productImage,
-                    days,
-                    startDate: formatDate(startD),
-                    endDate: formatDate(endDate),
-                    address,
-                    total: finalTotal,
-                    status: "Menunggu Konfirmasi",
-                    approvalStatus: "pending",
-                    paymentStatus: "unpaid",
-                    createdAt: Date.now()
-                  };
-                  
-                  orders.push(newOrder);
-                  localStorage.setItem("rental_orders", JSON.stringify(orders));
-
-                  // Update UI dan Pindah Halaman
-                  setShowModal(false);
-                  router.push("/user/pesanan");
-                }}
+                onClick={createRental}
                 className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Konfirmasi
+                {isSubmitting ? "Memproses..." : "Konfirmasi"}
               </button>
             </div>
           </div>

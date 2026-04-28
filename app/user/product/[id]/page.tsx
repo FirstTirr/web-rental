@@ -1,18 +1,46 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { products } from "../../../../lib/data";
+import { cookies } from "next/headers";
 import { Calculator } from "../../../../components/price-calculator";
 
-// In Next.js 13+ app dir, params in dynamic pages is a Promise resolving to {id: string}
 export default async function ProductDetail({ params }: { params: Promise<{ id: string }> }) {
   const pId = (await params).id;
-  const product = products.find((p) => p.id === pId);
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
 
-  if (!product) {
-    return notFound();
+  const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  const res = await fetch(`${BACKEND_URL}/api/products/${pId}`, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) return notFound();
+
+  const jsonResponse = await res.json();
+  const product = jsonResponse.data;
+
+  if (!product) return notFound();
+
+  // --- LOGIKA FIX ENDPOINT GAMBAR ---
+  let photoPath = product.photo_url || "";
+  
+  // Jika path mengandung '/static/img/', kita ubah menjadi '/api/images/'
+  if (photoPath.includes("/static/img/")) {
+    photoPath = photoPath.replace("/static/img/", "/api/images/");
   }
 
-  const isKendaraan = product.category === "Kendaraan";
+  const imageUrl = photoPath 
+    ? `${BACKEND_URL}${photoPath}`
+    : "https://via.placeholder.com/400";
+  // ----------------------------------
+
+  const categoryName = product.category_name || "Umum";
+  const isKendaraan = categoryName === "Kendaraan";
+  const finalPrice = Number(product.price_per_day || 0);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
@@ -33,7 +61,7 @@ export default async function ProductDetail({ params }: { params: Promise<{ id: 
                   isKendaraan ? "bg-indigo-100 text-indigo-700" : "bg-cyan-100 text-cyan-700"
                 }`}
               >
-                {product.category}
+                {categoryName}
               </span>
             </div>
 
@@ -42,14 +70,14 @@ export default async function ProductDetail({ params }: { params: Promise<{ id: 
             </h1>
 
             <p className="mt-4 text-lg text-slate-600 leading-relaxed max-w-xl">
-              {product.description}
+              {product.description || "Tidak ada deskripsi produk."}
             </p>
           </div>
 
           <div className="relative overflow-hidden rounded-3xl bg-slate-200">
             <picture>
               <img
-                src={product.image}
+                src={imageUrl}
                 alt={product.name}
                 className="aspect-square w-full object-cover sm:aspect-[4/3] lg:aspect-square"
               />
@@ -59,9 +87,9 @@ export default async function ProductDetail({ params }: { params: Promise<{ id: 
 
         <section className="flex flex-col justify-start">
           <Calculator 
-            pricePerDay={product.pricePerDay} 
+            pricePerDay={finalPrice} 
             productName={product.name} 
-            productImage={product.image} 
+            productImage={imageUrl} 
             productId={product.id} 
           />
         </section>

@@ -1,34 +1,121 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  activateRental,
+  fetchAdminRentals,
+  formatDate,
+  formatIdr,
+  getAuthToken,
+} from "../../../lib/rental-api";
 
-// Data Dummy
-const initialPayments = [
-  { id: "PAY-101", user: "Fathir Adzan", targetAmount: 750000, method: "Bank BCA", date: "25 April 2026", unitSewa: "Sony A7III + Lensa" },
-  { id: "PAY-102", user: "Raka Pratama", targetAmount: 300000, method: "DANA", date: "25 April 2026", unitSewa: "Canon M50" },
-  { id: "PAY-103", user: "Vino Ardiansyah", targetAmount: 500000, method: "Mandiri", date: "26 April 2026", unitSewa: "DJI Mavic Air 2" },
-];
+type PaymentItem = {
+  id: string;
+  rentalId: number;
+  user: string;
+  targetAmount: number;
+  method: string;
+  date: string;
+  unitSewa: string;
+  paidAmount?: number;
+  status?: string;
+};
 
 export default function VerifikasiPembayaranUI() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [currentPage, setCurrentPage] = useState<'verifikasi' | 'lunas'>('verifikasi');
   const [searchQuery, setSearchQuery] = useState("");
-  const [payments, setPayments] = useState(initialPayments);
-  const [completedPayments, setCompletedPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentItem[]>([]);
+  const [completedPayments, setCompletedPayments] = useState<PaymentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   
-  const [activeAction, setActiveAction] = useState<any>(null);
+  const [activeAction, setActiveAction] = useState<PaymentItem | null>(null);
   const [inputAmount, setInputAmount] = useState("");
 
-  // Filter Search
-  const filteredPayments = (currentPage === 'verifikasi' ? payments : completedPayments).filter(p => 
-    p.user.toLowerCase().includes(searchQuery.toLowerCase()) || p.id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const mapRentalToPayment = useCallback((row: any): PaymentItem => {
+    const rentalFee = Number(row?.rental_fee || 0);
+    const lateFee = Number(row?.late_fee || 0);
+    const total = rentalFee + lateFee;
+    return {
+      id: `RNT-${row?.id ?? "-"}`,
+      rentalId: Number(row?.id || 0),
+      user: String(row?.username || `User #${row?.user_id ?? "-"}`),
+      targetAmount: total,
+      method: "Manual",
+      date: formatDate(row?.created_at),
+      unitSewa: String(row?.product_name || "Produk"),
+    };
+  }, []);
 
-  const handleConfirm = () => {
+  const fetchPayments = useCallback(async () => {
+    if (!API_URL) {
+      setError("Konfigurasi NEXT_PUBLIC_API_URL belum tersedia.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const token = getAuthToken();
+      const { rows } = await fetchAdminRentals(API_URL, token);
+      const typedRows = Array.isArray(rows) ? rows : [];
+      const approved = typedRows.filter((row) => String(row?.rental_status) === "approved").map(mapRentalToPayment);
+      const activeOrCompleted = typedRows
+        .filter((row) => ["active", "completed"].includes(String(row?.rental_status)))
+        .map((row) => ({
+          ...mapRentalToPayment(row),
+          status: "LUNAS",
+          paidAmount: Number(row?.rental_fee || 0) + Number(row?.late_fee || 0),
+        }));
+
+      setPayments(approved);
+      setCompletedPayments(activeOrCompleted);
+    } catch {
+      setError("Gagal memuat data pembayaran.");
+      setPayments([]);
+      setCompletedPayments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [API_URL, mapRentalToPayment]);
+
+  useEffect(() => {
+    void fetchPayments();
+  }, [fetchPayments]);
+
+  // Filter Search
+  const filteredPayments = useMemo(() => {
+    const data = currentPage === "verifikasi" ? payments : completedPayments;
+    return data.filter((p) =>
+      p.user.toLowerCase().includes(searchQuery.toLowerCase()) || p.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [currentPage, payments, completedPayments, searchQuery]);
+
+  const handleConfirm = async () => {
+    if (!activeAction) return;
+
+    const currentAction: PaymentItem = activeAction;
     const amount = Number(inputAmount);
-    if (amount === activeAction.targetAmount) {
-      // Pindahkan ke list lunas
-      setCompletedPayments([...completedPayments, { ...activeAction, paidAmount: amount, status: 'LUNAS' }]);
-      setPayments(payments.filter(p => p.id !== activeAction.id));
-      setCurrentPage('lunas'); // Langsung pindah page
+    if (amount === currentAction.targetAmount) {
+      try {
+        if (!API_URL) {
+          throw new Error("Konfigurasi backend belum tersedia.");
+        }
+        const token = getAuthToken();
+        const result = await activateRental(API_URL, token, currentAction.rentalId);
+        if (!result.response.ok) {
+          const payload = result.json as any;
+          throw new Error(String(payload?.error || "Gagal mengaktifkan rental"));
+        }
+
+        setCompletedPayments((prev) => [...prev, { ...currentAction, paidAmount: amount, status: "LUNAS" }]);
+        setPayments((prev) => prev.filter((p) => p.id !== currentAction.id));
+        setCurrentPage("lunas");
+      } catch (err: any) {
+        alert(err?.message || "Gagal memproses pembayaran.");
+      }
     } else {
       alert("Pembayaran dicatat sebagai 'Kurang'. Tetap di halaman verifikasi.");
     }
@@ -37,25 +124,25 @@ export default function VerifikasiPembayaranUI() {
   };
 
   return (
-    <div className="relative min-h-screen space-y-8 w-full max-w-6xl mx-auto p-6 md:p-10">
+    <div className="relative min-h-screen space-y-8 w-full max-w-6xl mx-auto px-4 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8">
       {/* Header & Search */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <div className="flex gap-4 mb-4">
+          <div className="mb-4 flex max-w-full gap-3 overflow-x-auto pb-1">
             <button 
               onClick={() => setCurrentPage('verifikasi')}
-              className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${currentPage === 'verifikasi' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100'}`}
+              className={`whitespace-nowrap px-4 sm:px-6 py-2 rounded-full text-sm font-bold transition-all ${currentPage === 'verifikasi' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100'}`}
             >
               Perlu Verifikasi
             </button>
             <button 
               onClick={() => setCurrentPage('lunas')}
-              className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${currentPage === 'lunas' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100'}`}
+              className={`whitespace-nowrap px-4 sm:px-6 py-2 rounded-full text-sm font-bold transition-all ${currentPage === 'lunas' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-slate-500 border border-slate-100'}`}
             >
               Sudah Lunas ✨
             </button>
           </div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
+            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter">
             {currentPage === 'verifikasi' ? 'Verifikasi Dana' : 'Riwayat Lunas'}
           </h1>
         </div>
@@ -72,15 +159,21 @@ export default function VerifikasiPembayaranUI() {
         </div>
       </header>
 
+      {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>}
+
       {/* Grid Card */}
       <div className="grid gap-6">
-        {filteredPayments.length > 0 ? filteredPayments.map((pay) => (
+        {loading ? (
+          <div className="text-center py-20 bg-white rounded-[3rem] border border-dashed border-slate-200">
+            <p className="text-slate-400 font-bold uppercase tracking-widest">Memuat data...</p>
+          </div>
+        ) : filteredPayments.length > 0 ? filteredPayments.map((pay) => (
           <div key={pay.id} className="group relative bg-white p-1 rounded-[2.2rem] transition-all hover:scale-[1.01]">
             {/* Dekorasi Border Gradasi */}
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-100 to-emerald-100 rounded-[2.2rem] opacity-0 group-hover:opacity-100 transition-opacity" />
             
-            <div className="relative bg-white p-7 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm border border-slate-50">
-              <div className="flex items-center gap-6">
+            <div className="relative bg-white p-4 sm:p-6 rounded-[2rem] flex flex-col md:flex-row items-start sm:items-center justify-between gap-6 shadow-sm border border-slate-50">
+                <div className="flex items-start sm:items-center gap-4 sm:gap-6 min-w-0">
                 <div className={`h-16 w-16 rounded-2xl flex items-center justify-center text-2xl shadow-inner ${currentPage === 'lunas' ? 'bg-emerald-50' : 'bg-slate-50'}`}>
                   {currentPage === 'lunas' ? '✅' : '💳'}
                 </div>
@@ -94,19 +187,19 @@ export default function VerifikasiPembayaranUI() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-center md:items-end">
+              <div className="flex flex-col items-start md:items-end">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
                   {currentPage === 'lunas' ? 'Total Dibayar' : 'Tagihan'}
                 </p>
                 <p className={`text-2xl font-black ${currentPage === 'lunas' ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  Rp{pay.targetAmount.toLocaleString('id-ID')}
+                  {formatIdr(pay.targetAmount)}
                 </p>
               </div>
 
               {currentPage === 'verifikasi' && (
                 <button 
                   onClick={() => setActiveAction(pay)}
-                  className="w-full md:w-auto px-10 py-4 rounded-2xl bg-slate-900 text-white font-bold hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200"
+                  className="w-full md:w-auto px-6 sm:px-10 py-3 sm:py-4 rounded-2xl bg-slate-900 text-white font-bold hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200"
                 >
                   Verifikasi
                 </button>
@@ -159,7 +252,7 @@ export default function VerifikasiPembayaranUI() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mt-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-10">
               <button onClick={handleClose} className="py-5 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all">Batal</button>
               <button 
                 onClick={handleConfirm}

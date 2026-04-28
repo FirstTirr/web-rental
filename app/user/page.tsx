@@ -1,13 +1,45 @@
+// app/user/page.tsx
+import React from 'react';
 import Link from "next/link";
-import { products } from "../../lib/data";
-import { ProductCard } from "../../components/user/product-card";
+import { cookies } from "next/headers"; // API Server Component
+import ProductCard from "../../components/user/product-card";
 
-export default function UserDashboard() {
-  const topProducts = products.slice(0, 3); // Ambil 3 data untuk beranda
+type ProductItem = {
+  id: number | string;
+  [key: string]: unknown;
+};
+
+export default async function UserDashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  let topProducts: ProductItem[] = [];
+
+  if (backendUrl) {
+    try {
+      const res = await fetch(`${backendUrl}/api/products`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (res.ok) {
+        const jsonResponse = await res.json();
+        const data = Array.isArray(jsonResponse?.data) ? jsonResponse.data : [];
+        topProducts = data
+          .sort((a: ProductItem, b: ProductItem) => Number(b?.id || 0) - Number(a?.id || 0))
+          .slice(0, 3);
+      }
+    } catch {
+      topProducts = [];
+    }
+  }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col px-4 sm:px-6 lg:px-8">
-      {/* Welcome Banner */}
+    <main className="mx-auto flex w-full max-w-6xl flex-col px-4 py-8 sm:px-6 lg:px-8">
       <section className="animate-fade-up mb-14 overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-cyan-600 p-8 text-white shadow-lg sm:p-12 relative">
         <div className="relative z-10 w-full md:w-3/4">
           <span className="animate-fade-in-soft mb-2 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur-md">Halo, Admin/User</span>
@@ -27,20 +59,26 @@ export default function UserDashboard() {
           </div>
         </div>
       </section>
-
-      {/* Recommended Products */}
-      <section className="animate-fade-up-delay">
+      
+      <section>
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Rekomendasi Minggu Ini</h2>
-          <Link href="/user/product" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+          <h2 className="text-2xl font-bold text-slate-900">Rekomendasi Terbaru</h2>
+          <Link href="/user/product" className="text-sm font-semibold text-indigo-600">
             Lihat semua &rarr;
           </Link>
         </div>
+
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {topProducts.map((p) => (
-            <ProductCard key={p.id} item={p} />
+            <ProductCard key={p.id} product={p} />
           ))}
         </div>
+
+        {topProducts.length === 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm font-medium text-slate-500">
+            Produk belum tersedia atau server backend belum terhubung.
+          </div>
+        )}
       </section>
     </main>
   );

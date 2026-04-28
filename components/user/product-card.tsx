@@ -1,35 +1,52 @@
-import Link from "next/link";
-import Image from "next/image";
-import { Product } from "../../lib/data";
+"use client";
+import React from 'react';
+import Link from 'next/link';
 
-export function ProductCard({ item }: { item: Product }) {
-  const isKendaraan = item.category === "Kendaraan";
-  const badgeColor = isKendaraan ? "bg-indigo-100 text-indigo-700" : "bg-cyan-100 text-cyan-700";
+export default function ProductCard({ product, onDetail }: { product: any, onDetail?: (p: any) => void }) {
+  if (!product) return null;
+
+  // LOGIKA STOK: Filter unit yang statusnya 'available'
+  const availableUnits = product.item_instances?.filter((unit: any) => unit.status === 'available').length ?? 0;
+
+  // JIKA STOK 0, JANGAN RENDER CARD (HILANG DARI KATALOG)
+  if (availableUnits === 0 && product.item_instances) return null;
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const getImageUrl = (photoUrl: string) => {
+    if (!photoUrl) return "https://placehold.co/400x300?text=No+Image";
+    const fileName = photoUrl.includes('/') ? photoUrl.split('/').pop() : photoUrl;
+    return `${API_URL}/api/images/products/${fileName}`;
+  };
 
   return (
-    <Link href={`/user/product/${item.id}`} className="group hover-lift-soft focus-ring-soft flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md">
-      <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-        {/* Menggunakan image dari URL unsplash (mock) */}
-        <picture>
-          <img src={item.image} alt={item.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
-        </picture>
-        <div className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${badgeColor}`}>
-          {item.category}
+    <div className="group bg-white p-4 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+      <div className="h-48 w-full bg-slate-100 rounded-[2rem] overflow-hidden mb-4 relative">
+        <img 
+          src={getImageUrl(product.photo_url)} 
+          alt={product.name}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+        />
+        {/* Badge Stok Real-time */}
+        <div className="absolute top-4 left-4">
+            <span className="bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-800 shadow-sm">
+                {availableUnits} READY
+            </span>
         </div>
       </div>
-      <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-lg font-bold text-slate-900">{item.name}</h3>
-        <p className="mt-2 line-clamp-2 text-sm text-slate-600 flex-1">{item.description}</p>
-        <div className="mt-5 border-t border-slate-100 pt-4 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-500">Sewa dari</span>
-            <span className="text-base font-bold text-indigo-700">Rp{(item.pricePerDay / 1000).toFixed(0)}k <span className="text-xs font-normal text-slate-500">/hari</span></span>
-          </div>
-          <span className="btn-soft flex w-full items-center justify-center rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition group-hover:bg-indigo-600 group-hover:text-white">
-            Lihat Detail
-          </span>
-        </div>
+      
+      <div className="px-2">
+        <h3 className="font-black text-slate-800 text-lg mb-1 truncate">{product.name}</h3>
+        <p className="text-blue-600 font-black text-xl mb-4">
+          Rp{Number(product.price_per_day || 0).toLocaleString('id-ID')}
+        </p>
+        
+        <button
+          onClick={() => onDetail ? onDetail(product) : null}
+          className="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-blue-600 transition-all"
+        >
+          Lihat Detail
+        </button>
       </div>
-    </Link>
+    </div>
   );
 }

@@ -75,7 +75,7 @@ export default function ProductPage() {
           <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600">
             <Sparkles className="h-3 w-3" /> Exclusive Rental Collection
           </div>
-          <h1 className="mb-10 text-5xl font-black italic tracking-tighter text-slate-900 md:text-7xl uppercase">
+          <h1 className="mb-10 text-5xl font-black tracking-tighter text-slate-900 md:text-7xl uppercase">
             Pilih Unit, <span className="text-blue-600">Mulai Akselerasi.</span>
           </h1>
           

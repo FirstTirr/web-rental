@@ -73,11 +73,30 @@ export default function LoginUI() {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-x-clip bg-slate-50 px-4 py-12 text-slate-900 sm:px-6 lg:px-8">
+      {/* Tombol Kembali ke Landing Page */}
+      <div className="fixed left-6 top-6 z-50 lg:left-12 lg:top-12">
+        <Link 
+          href="/" 
+          className="group flex items-center gap-3 rounded-2xl border border-white/50 bg-white/40 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 shadow-xl backdrop-blur-md transition-all hover:bg-white hover:text-indigo-600 hover:-translate-x-1"
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className="h-4 w-4 transition-transform group-hover:-translate-x-1" 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Kembali
+        </Link>
+      </div>
+
       {/* Background Ornaments */}
       <div className="pointer-events-none absolute -left-20 top-0 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -right-20 h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl" />
 
-      {/* Container Form - Fix: max-w-md agar tidak gepeng */}
+      {/* Container Form */}
       <div className="relative w-full max-w-md space-y-8 rounded-[2.5rem] border border-white/50 bg-white/80 p-8 shadow-2xl backdrop-blur-xl sm:p-12">
         <div className="text-center">
           <Link href="/" className="text-2xl font-black tracking-tighter text-slate-900 italic uppercase">

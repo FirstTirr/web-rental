@@ -90,7 +90,6 @@ export default function ValidasiPesanan() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  // Reset page saat tab berubah
   useEffect(() => { setPage(1); }, [activeTab]);
 
   const displayedItems = useMemo(() => {
@@ -210,46 +209,63 @@ export default function ValidasiPesanan() {
         {loading ? (
           <div className="py-24 text-center text-slate-400 font-bold bg-white rounded-[3rem] border border-slate-100">Memuat...</div>
         ) : paginatedItems.length > 0 ? (
-          paginatedItems.map((order) => (
-            <div key={order.id} className={`bg-white p-6 rounded-[2rem] border ${activeTab === "terlambat" ? "border-rose-200 shadow-rose-100" : "border-slate-100"} shadow-xl flex flex-col lg:flex-row items-center justify-between gap-6 transition-all`}>
-              <div className="flex items-center gap-5 w-full lg:w-auto">
-                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-bold ${activeTab === "terlambat" ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-600"}`}>
-                  {activeTab === "terlambat" ? "⏰" : "📦"}
-                </div>
-                <div>
-                  <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">#{order.id}</span>
-                  <h3 className="text-lg font-black text-slate-800 leading-tight">{order.borrower}</h3>
-                  <p className="text-sm text-slate-500 font-medium">{order.unit}</p>
-                </div>
-              </div>
+          paginatedItems.map((order) => {
+            // LOGIKA PEMBATASAN TOMBOL
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const isReturnEnabled = new Date(order.endDate) <= now;
 
-              <div className="flex flex-col lg:items-end text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status {activeTab === "terlambat" && "Keterlambatan"}</p>
-                <p className={`text-sm font-black ${activeTab === "terlambat" ? "text-rose-600" : "text-slate-800"}`}>{order.dateRange}</p>
-                <p className="text-sm font-black text-slate-900">{formatIdr(order.total)}</p>
-              </div>
+            return (
+              <div key={order.id} className={`bg-white p-6 rounded-[2rem] border ${activeTab === "terlambat" ? "border-rose-200 shadow-rose-100" : "border-slate-100"} shadow-xl flex flex-col lg:flex-row items-center justify-between gap-6 transition-all`}>
+                <div className="flex items-center gap-5 w-full lg:w-auto">
+                  <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-bold ${activeTab === "terlambat" ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-600"}`}>
+                    {activeTab === "terlambat" ? "⏰" : "📦"}
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">#{order.id}</span>
+                    <h3 className="text-lg font-black text-slate-800 leading-tight">{order.borrower}</h3>
+                    <p className="text-sm text-slate-500 font-medium">{order.unit}</p>
+                  </div>
+                </div>
 
-              <div className="flex gap-3 w-full lg:w-auto">
-                {activeTab === "pending" ? (
-                  <button onClick={() => setSelectedRental(order)} className="w-full px-8 py-3 rounded-2xl bg-slate-900 text-white font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
-                    Validasi
-                  </button>
-                ) : (order.status === "active" || order.status === "approved") ? (
-                  <button onClick={() => openReturnModal(order)} className={`w-full px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-white shadow-sm transition-all ${activeTab === "terlambat" ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                    Barang Sudah Kembali
-                  </button>
-                ) : (
-                  <span className="text-[10px] font-black uppercase px-4 py-2 bg-slate-50 text-slate-400 rounded-full">Record Locked</span>
-                )}
+                <div className="flex flex-col lg:items-end text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status {activeTab === "terlambat" && "Keterlambatan"}</p>
+                  <p className={`text-sm font-black ${activeTab === "terlambat" ? "text-rose-600" : "text-slate-800"}`}>{order.dateRange}</p>
+                  <p className="text-sm font-black text-slate-900">{formatIdr(order.total)}</p>
+                </div>
+
+                <div className="flex gap-3 w-full lg:w-auto">
+                  {activeTab === "pending" ? (
+                    <button onClick={() => setSelectedRental(order)} className="w-full px-8 py-3 rounded-2xl bg-slate-900 text-white font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
+                      Validasi
+                    </button>
+                  ) : (order.status === "active" || order.status === "approved") ? (
+                    <button 
+                      onClick={() => openReturnModal(order)} 
+                      disabled={!isReturnEnabled}
+                      className={`w-full px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all 
+                        ${!isReturnEnabled 
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                          : activeTab === "terlambat" 
+                            ? "bg-rose-600 hover:bg-rose-700" 
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                    >
+                      {isReturnEnabled ? "Barang Sudah Kembali" : "Belum Bisa Kembali"}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-black uppercase px-4 py-2 bg-slate-50 text-slate-400 rounded-full">Record Locked</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-100 font-bold text-slate-400">Kosong...</div>
         )}
       </div>
 
-      {/* Pagination */}
+      {/* Pagination & Modals (Tetap sama) */}
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
           <button
@@ -259,14 +275,6 @@ export default function ValidasiPesanan() {
           >
             ← Prev
           </button>
-
-          {pageNumbers[0] > 1 && (
-            <>
-              <button onClick={() => setPage(1)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
-              {pageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
-            </>
-          )}
-
           {pageNumbers.map((p) => (
             <button
               key={p}
@@ -278,14 +286,6 @@ export default function ValidasiPesanan() {
               {p}
             </button>
           ))}
-
-          {pageNumbers[pageNumbers.length - 1] < totalPages && (
-            <>
-              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
-              <button onClick={() => setPage(totalPages)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalPages}</button>
-            </>
-          )}
-
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
@@ -296,35 +296,30 @@ export default function ValidasiPesanan() {
         </div>
       )}
 
-      {/* Modal Validasi */}
       {selectedRental && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl">
             <h2 className="text-2xl font-black italic tracking-tighter mb-2">Konfirmasi Pesanan</h2>
-            <p className="text-slate-500 text-sm font-medium mb-6">Setujui penyewaan dari <span className="text-slate-900 font-bold">{selectedRental.borrower}</span>?</p>
-            <div className="flex gap-3">
-              <button onClick={() => handleAction("approve")} disabled={actionLoading} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all disabled:opacity-50">
-                {actionLoading ? "..." : "Terima"}
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => handleAction("approve")} disabled={actionLoading} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 disabled:opacity-50">
+                Terima
               </button>
-              <button onClick={() => handleAction("reject")} disabled={actionLoading} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all disabled:opacity-50">
+              <button onClick={() => handleAction("reject")} disabled={actionLoading} className="flex-1 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 disabled:opacity-50">
                 Tolak
               </button>
             </div>
-            <button onClick={() => setSelectedRental(null)} className="w-full mt-4 text-slate-400 text-xs font-bold uppercase tracking-widest">Batal</button>
+            <button onClick={() => setSelectedRental(null)} className="w-full mt-4 text-slate-400 text-xs font-bold uppercase">Batal</button>
           </div>
         </div>
       )}
 
-      {/* Modal Pengembalian */}
       {returnTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl">
             <h2 className="text-2xl font-black italic tracking-tighter mb-2">Pengembalian Unit</h2>
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">Tanggal Kembali</label>
-                <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
-              </div>
+            <div className="space-y-4 mb-6 mt-4">
+              <label className="text-[10px] font-black uppercase text-slate-400">Tanggal Kembali</label>
+              <input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
               {estimateLateFee(returnTarget, returnDate).lateDays > 0 && (
                 <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl">
                   <p className="text-rose-600 text-xs font-bold uppercase">Terlambat {estimateLateFee(returnTarget, returnDate).lateDays} Hari</p>
@@ -332,11 +327,10 @@ export default function ValidasiPesanan() {
                 </div>
               )}
             </div>
-            {returnError && <p className="text-rose-600 text-xs font-bold mb-4">{returnError}</p>}
-            <button onClick={handleReturn} disabled={actionLoading} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-blue-600 transition-all disabled:opacity-50">
-              {actionLoading ? "Proses..." : "Konfirmasi Selesai"}
+            <button onClick={handleReturn} disabled={actionLoading} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-blue-600 disabled:opacity-50">
+              Konfirmasi Selesai
             </button>
-            <button onClick={() => setReturnTarget(null)} className="w-full mt-4 text-slate-400 text-xs font-bold uppercase tracking-widest">Batal</button>
+            <button onClick={() => setReturnTarget(null)} className="w-full mt-4 text-slate-400 text-xs font-bold uppercase">Batal</button>
           </div>
         </div>
       )}

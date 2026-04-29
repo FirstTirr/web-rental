@@ -30,12 +30,17 @@ type ReportRow = {
   created_at: string;
 };
 
+const TX_PER_PAGE = 10;
+const PERF_PER_PAGE = 5;
+
 export default function RekapPenjualan() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [summaryCards, setSummaryCards] = useState<SummaryCard[]>([]);
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [txPage, setTxPage] = useState(1);
+  const [perfPage, setPerfPage] = useState(1);
 
   const toNumberValue = (value: unknown) => {
     if (typeof value === "number") return value;
@@ -49,69 +54,35 @@ export default function RekapPenjualan() {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError("");
-
     try {
       const token = getAuthToken();
       const { rows: reportRows } = await fetchRentalReport(API_URL, token);
-      
-      // Urutkan data terbaru di paling atas
       const typedRows = (reportRows as ReportRow[]).sort((a, b) => b.id - a.id);
       setRows(typedRows);
+      setTxPage(1);
+      setPerfPage(1);
 
-      // --- LOGIKA KALKULASI TOTAL PENDAPATAN (HARGA SEWA + DENDA) ---
-      
-      // Filter transaksi yang menghasilkan uang (Approved, Active, Completed, Overdue)
-      const validRows = typedRows.filter((row) => 
+      const validRows = typedRows.filter((row) =>
         ["active", "completed", "approved", "overdue"].includes(String(row?.rental_status))
       );
-
-      // 1. Total Pendapatan = Rental Fee + Late Fee (Mau telat atau tidak, pokoknya masuk kantong)
       const totalRevenue = validRows.reduce(
-        (acc, row) => acc + toNumberValue(row?.rental_fee) + toNumberValue(row?.late_fee), 
-        0
+        (acc, row) => acc + toNumberValue(row?.rental_fee) + toNumberValue(row?.late_fee), 0
       );
-
-      // 2. Khusus hitung total denda saja
       const totalLateFees = validRows.reduce(
-        (acc, row) => acc + toNumberValue(row?.late_fee), 
-        0
+        (acc, row) => acc + toNumberValue(row?.late_fee), 0
       );
-
-      // 3. Hitung berapa banyak yang berstatus 'overdue' (terlambat)
       const totalOverdue = typedRows.filter(r => String(r.rental_status) === "overdue").length;
-
       const totalTransactions = typedRows.length;
 
       setSummaryCards([
-        { 
-          label: "Total Pendapatan", 
-          value: formatIdr(totalRevenue), 
-          detail: "Sewa + Denda dari semua transaksi", 
-          color: "text-emerald-600" 
-        },
-        { 
-          label: "Transaksi Terlambat", 
-          value: `${totalOverdue} Unit`, 
-          detail: "Unit yang melewati batas waktu", 
-          color: "text-rose-600" 
-        },
-        { 
-          label: "Total Denda", 
-          value: formatIdr(totalLateFees), 
-          detail: "Akumulasi biaya keterlambatan", 
-          color: "text-amber-600" 
-        },
-        { 
-          label: "Total Transaksi", 
-          value: String(totalTransactions), 
-          detail: "Semua riwayat di database", 
-          color: "text-slate-900" 
-        },
+        { label: "Total Pendapatan", value: formatIdr(totalRevenue), detail: "Sewa + Denda dari semua transaksi", color: "text-emerald-600" },
+        { label: "Transaksi Terlambat", value: `${totalOverdue} Unit`, detail: "Unit yang melewati batas waktu", color: "text-rose-600" },
+        { label: "Total Denda", value: formatIdr(totalLateFees), detail: "Akumulasi biaya keterlambatan", color: "text-amber-600" },
+        { label: "Total Transaksi", value: String(totalTransactions), detail: "Semua riwayat di database", color: "text-slate-900" },
       ]);
-    } catch (err) {
+    } catch {
       setError("Gagal memuat laporan.");
       setSummaryCards([]);
       setRows([]);
@@ -120,9 +91,7 @@ export default function RekapPenjualan() {
     }
   }, [API_URL]);
 
-  useEffect(() => {
-    void fetchReport();
-  }, [fetchReport]);
+  useEffect(() => { void fetchReport(); }, [fetchReport]);
 
   const performance = useMemo(() => {
     const map = new Map<string, { nama: string; jumlah: number; total: number }>();
@@ -133,7 +102,7 @@ export default function RekapPenjualan() {
       current.total += toNumberValue(row.rental_fee) + toNumberValue(row.late_fee);
       map.set(key, current);
     });
-    return [...map.values()].sort((a, b) => b.jumlah - a.jumlah).slice(0, 6);
+    return [...map.values()].sort((a, b) => b.jumlah - a.jumlah); // ✅ hapus .slice(0,6)
   }, [rows]);
 
   const metrics = useMemo(() => {
@@ -142,19 +111,35 @@ export default function RekapPenjualan() {
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
-
     const overdue = statusCount.overdue || 0;
     const completed = statusCount.completed || 0;
     const active = statusCount.active || 0;
     const total = rows.length || 1;
-
     return [
       { label: "Status Terlambat", val: String(overdue), color: "bg-rose-500" },
       { label: "Status Dipinjam", val: String(active), color: "bg-blue-500" },
       { label: "Status Selesai", val: String(completed), color: "bg-emerald-500" },
-      { label: "Rasio Selesai", val: `${((completed/total)*100).toFixed(0)}%`, color: "bg-slate-400" },
+      { label: "Rasio Selesai", val: `${((completed / total) * 100).toFixed(0)}%`, color: "bg-slate-400" },
     ];
   }, [rows]);
+
+  // Pagination: Transaksi
+  const totalTxPages = Math.ceil(rows.length / TX_PER_PAGE);
+  const paginatedRows = rows.slice((txPage - 1) * TX_PER_PAGE, txPage * TX_PER_PAGE);
+  const txPageNumbers = useMemo(() => {
+    const range: number[] = [];
+    for (let i = Math.max(1, txPage - 2); i <= Math.min(totalTxPages, txPage + 2); i++) range.push(i);
+    return range;
+  }, [txPage, totalTxPages]);
+
+  // Pagination: Produk Terlaris
+  const totalPerfPages = Math.ceil(performance.length / PERF_PER_PAGE);
+  const paginatedPerf = performance.slice((perfPage - 1) * PERF_PER_PAGE, perfPage * PERF_PER_PAGE);
+  const perfPageNumbers = useMemo(() => {
+    const range: number[] = [];
+    for (let i = Math.max(1, perfPage - 2); i <= Math.min(totalPerfPages, perfPage + 2); i++) range.push(i);
+    return range;
+  }, [perfPage, totalPerfPages]);
 
   return (
     <div className="space-y-8 pb-12 px-4 sm:px-0 text-slate-900">
@@ -163,8 +148,8 @@ export default function RekapPenjualan() {
           <h1 className="text-3xl sm:text-4xl font-black tracking-tighter italic uppercase">Laporan Keuangan</h1>
           <p className="text-slate-500 text-sm font-medium">Rekap pendapatan otomatis termasuk denda keterlambatan.</p>
         </div>
-        <button 
-          onClick={fetchReport} 
+        <button
+          onClick={fetchReport}
           className="bg-slate-900 hover:bg-emerald-600 text-white px-8 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-200"
         >
           Refresh Laporan
@@ -191,10 +176,18 @@ export default function RekapPenjualan() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* PRODUK TERLARIS */}
         <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
           <div className="p-8 border-b border-slate-50 flex justify-between items-center">
             <h3 className="font-black text-slate-800 tracking-tight uppercase text-sm">Produk Terlaris</h3>
-            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase italic">Top Income</span>
+            <div className="flex items-center gap-3">
+              {performance.length > 0 && (
+                <span className="text-[10px] font-medium text-slate-400">
+                  {(perfPage - 1) * PERF_PER_PAGE + 1}–{Math.min(perfPage * PERF_PER_PAGE, performance.length)} dari {performance.length}
+                </span>
+              )}
+              <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase italic">Top Income</span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -206,7 +199,7 @@ export default function RekapPenjualan() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-sm">
-                {performance.map((item) => (
+                {paginatedPerf.map((item) => (
                   <tr key={item.nama} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-8 py-5 font-bold text-slate-700">{item.nama}</td>
                     <td className="px-8 py-5 font-black text-slate-900">{item.jumlah}x</td>
@@ -216,8 +209,56 @@ export default function RekapPenjualan() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Produk Terlaris */}
+          {totalPerfPages > 1 && (
+            <div className="flex items-center justify-center gap-2 px-8 py-5 border-t border-slate-50">
+              <button
+                onClick={() => setPerfPage((p) => Math.max(1, p - 1))}
+                disabled={perfPage === 1}
+                className="h-9 px-3 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                ← Prev
+              </button>
+
+              {perfPageNumbers[0] > 1 && (
+                <>
+                  <button onClick={() => setPerfPage(1)} className="h-9 w-9 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
+                  {perfPageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
+                </>
+              )}
+
+              {perfPageNumbers.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPerfPage(p)}
+                  className={`h-9 w-9 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+                    p === perfPage ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+
+              {perfPageNumbers[perfPageNumbers.length - 1] < totalPerfPages && (
+                <>
+                  {perfPageNumbers[perfPageNumbers.length - 1] < totalPerfPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
+                  <button onClick={() => setPerfPage(totalPerfPages)} className="h-9 w-9 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalPerfPages}</button>
+                </>
+              )}
+
+              <button
+                onClick={() => setPerfPage((p) => Math.min(totalPerfPages, p + 1))}
+                disabled={perfPage === totalPerfPages}
+                className="h-9 px-3 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* KESEHATAN RENTAL */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm self-start">
           <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-8">Kesehatan Rental</h4>
           <div className="space-y-8">
@@ -240,6 +281,11 @@ export default function RekapPenjualan() {
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-50 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex items-center justify-between">
           <h3 className="font-black text-slate-800 tracking-tight uppercase text-sm">Riwayat Transaksi</h3>
+          {rows.length > 0 && (
+            <p className="text-sm text-slate-400 font-medium">
+              Menampilkan {(txPage - 1) * TX_PER_PAGE + 1}–{Math.min(txPage * TX_PER_PAGE, rows.length)} dari {rows.length} data
+            </p>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -254,7 +300,7 @@ export default function RekapPenjualan() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {rows.map((row) => {
+              {paginatedRows.map((row) => {
                 const badge = rentalStatusLabel(row.rental_status);
                 const total = toNumberValue(row.rental_fee) + toNumberValue(row.late_fee);
                 return (
@@ -277,6 +323,53 @@ export default function RekapPenjualan() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Transaksi */}
+        {totalTxPages > 1 && (
+          <div className="flex items-center justify-center gap-2 px-8 py-6 border-t border-slate-50">
+            <button
+              onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+              disabled={txPage === 1}
+              className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              ← Prev
+            </button>
+
+            {txPageNumbers[0] > 1 && (
+              <>
+                <button onClick={() => setTxPage(1)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
+                {txPageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
+              </>
+            )}
+
+            {txPageNumbers.map((p) => (
+              <button
+                key={p}
+                onClick={() => setTxPage(p)}
+                className={`h-10 w-10 rounded-xl text-sm font-bold transition-all shadow-sm border ${
+                  p === txPage ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+
+            {txPageNumbers[txPageNumbers.length - 1] < totalTxPages && (
+              <>
+                {txPageNumbers[txPageNumbers.length - 1] < totalTxPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
+                <button onClick={() => setTxPage(totalTxPages)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalTxPages}</button>
+              </>
+            )}
+
+            <button
+              onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
+              disabled={txPage === totalTxPages}
+              className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

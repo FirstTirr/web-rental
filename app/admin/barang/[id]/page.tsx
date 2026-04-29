@@ -17,37 +17,47 @@ export default function DetailUnitPage({ params }: { params: Promise<{ id: strin
   const [units, setUnits] = useState<UnitBarang[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [productName, setProductName] = useState("Produk");
+  const [productName, setProductName] = useState("Memuat...");
 
-  // State untuk Modal Edit
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<UnitBarang | null>(null);
   const [editForm, setEditForm] = useState({ asset_code: "", status: "" });
 
-  // --- IMPLEMENTASI BARU: State Modal Tambah ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addForm, setAddForm] = useState({ asset_code: "" });
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const fetchUnits = useCallback(async () => {
+  // Fungsi ambil data unit & nama produk
+  const fetchData = useCallback(async () => {
     setLoading(true);
+    const token = localStorage.getItem("token");
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/item-instances?product_id=${id}`, {
+      // 1. Ambil Nama Produk
+      const resProd = await fetch(`${API_URL}/api/products/${id}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
-      const result = await res.json();
-      if (res.ok) setUnits(result.data || []);
-    } catch (err) { setError("Koneksi gagal"); }
-    finally { setLoading(false); }
+      const prodResult = await resProd.json();
+      if (resProd.ok) setProductName(prodResult.data.name);
+
+      // 2. Ambil List Units
+      const resUnits = await fetch(`${API_URL}/api/item-instances?product_id=${id}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const unitResult = await resUnits.json();
+      if (resUnits.ok) setUnits(unitResult.data || []);
+      
+    } catch (err) { 
+      setError("Koneksi ke server gagal"); 
+    } finally { 
+      setLoading(false); 
+    }
   }, [API_URL, id]);
 
   useEffect(() => {
-    fetchUnits();
-  }, [fetchUnits]);
+    fetchData();
+  }, [fetchData]);
 
-  // --- IMPLEMENTASI BARU: Fungsi Simpan Unit Baru ---
   const handleAddUnit = async () => {
     if (!addForm.asset_code) return alert("Asset code wajib diisi");
     try {
@@ -66,10 +76,9 @@ export default function DetailUnitPage({ params }: { params: Promise<{ id: strin
       });
 
       if (res.ok) {
-        alert("Unit berhasil ditambah!");
         setIsAddModalOpen(false);
         setAddForm({ asset_code: "" });
-        fetchUnits();
+        fetchData();
       } else {
         const result = await res.json();
         alert("Gagal: " + result.error);
@@ -97,9 +106,8 @@ export default function DetailUnitPage({ params }: { params: Promise<{ id: strin
       });
 
       if (res.ok) {
-        alert("Berhasil diupdate!");
         setIsEditModalOpen(false);
-        fetchUnits();
+        fetchData();
       } else {
         const result = await res.json();
         alert("Gagal: " + result.error);
@@ -108,116 +116,136 @@ export default function DetailUnitPage({ params }: { params: Promise<{ id: strin
   };
 
   const handleDelete = async (unitId: number) => {
-    if (!confirm("Hapus unit ini?")) return;
+    if (!confirm("Hapus unit ini secara permanen?")) return;
     try {
       const token = localStorage.getItem("token");
       await fetch(`${API_URL}/api/item-instances/${unitId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });
-      fetchUnits();
-    } catch (err) { alert("Gagal hapus"); }
+      fetchData();
+    } catch (err) { alert("Gagal hapus unit"); }
   };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <Link href="/admin/barang" className="bg-slate-100 p-2 rounded-xl"> Kembali </Link>
-        <h1 className="text-2xl font-bold">{productName}</h1>
-        {/* FIX: Sekarang membuka Modal Tambah */}
+    <div className="p-8 max-w-6xl mx-auto">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+        <div>
+          <Link href="/admin/barang" className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline flex items-center gap-2 mb-2">
+            ← Kembali ke CRUD Barang
+          </Link>
+          <h1 className="text-4xl font-black tracking-tighter uppercase italic text-slate-900 leading-none">
+            Manage Unit: <span className="text-indigo-600">{productName}</span>
+          </h1>
+        </div>
         <button 
           onClick={() => setIsAddModalOpen(true)} 
-          className="bg-blue-600 text-white px-4 py-2 rounded-xl"
+          className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-indigo-200 hover:scale-105 active:scale-95 transition-all"
         >
-          + Tambah
+          + Tambah Unit Baru
         </button>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
-        <table className="w-full">
-          <thead className="bg-slate-50 border-b">
+      {/* Table Section */}
+      <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
-              <th className="p-4 text-center">No</th>
-              <th className="p-4">Asset Code</th>
-              <th className="p-4 text-center">Status</th>
-              <th className="p-4 text-center">Aksi</th>
+              <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center w-20">No</th>
+              <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400">Asset Code</th>
+              <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+              <th className="p-6 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Aksi</th>
             </tr>
           </thead>
-          <tbody>
-            {units.map((unit, index) => (
-              <tr key={unit.id} className="border-b">
-                <td className="p-4 text-center">{index + 1}</td>
-                <td className="p-4 font-mono font-bold text-blue-600">{unit.asset_code}</td>
-                <td className="p-4 text-center capitalize">
-                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${unit.status === 'available' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                    {unit.status}
-                   </span>
-                </td>
-                <td className="p-4 flex justify-center gap-2">
-                  <button onClick={() => openEditModal(unit)} className="bg-slate-900 text-white px-4 py-1 rounded-lg text-xs">EDIT</button>
-                  <button onClick={() => handleDelete(unit.id)} className="bg-rose-50 text-rose-600 px-4 py-1 rounded-lg text-xs">HAPUS</button>
-                </td>
-              </tr>
-            ))}
+          <tbody className="divide-y divide-slate-50">
+            {loading ? (
+              <tr><td colSpan={4} className="p-20 text-center text-slate-400 font-bold italic">Mengambil data unit...</td></tr>
+            ) : units.length === 0 ? (
+              <tr><td colSpan={4} className="p-20 text-center text-slate-400 font-bold italic">Belum ada unit untuk produk ini.</td></tr>
+            ) : (
+              units.map((unit, index) => (
+                <tr key={unit.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="p-6 text-center font-bold text-slate-400 text-sm">{index + 1}</td>
+                  <td className="p-6">
+                    <span className="font-mono font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg text-sm italic">
+                      {unit.asset_code}
+                    </span>
+                  </td>
+                  <td className="p-6 text-center">
+                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${
+                      unit.status === 'available' ? 'bg-emerald-100 text-emerald-600' : 
+                      unit.status === 'rented' ? 'bg-blue-100 text-blue-600' : 
+                      'bg-rose-100 text-rose-600'
+                    }`}>
+                      {unit.status}
+                    </span>
+                  </td>
+                  <td className="p-6">
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => openEditModal(unit)} className="bg-slate-900 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all">EDIT</button>
+                      <button onClick={() => handleDelete(unit.id)} className="bg-rose-50 text-rose-600 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all">HAPUS</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* MODAL EDIT */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-[2rem] w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-black mb-4">Edit Unit</h2>
-            <div className="space-y-4">
+      {/* MODAL EDIT & TAMBAH (Gaya Neo-Brutalism) */}
+      {(isEditModalOpen || isAddModalOpen) && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-10 rounded-[3rem] w-full max-w-md shadow-2xl border border-white">
+            <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-6">
+              {isEditModalOpen ? "Update Unit" : "Registrasi Unit"}
+            </h2>
+            
+            <div className="space-y-6">
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase">Asset Code</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Code / Serial Number</label>
                 <input 
-                  className="w-full p-3 bg-slate-100 rounded-xl mt-1"
-                  value={editForm.asset_code}
-                  onChange={(e) => setEditForm({...editForm, asset_code: e.target.value})}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl mt-2 font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                  placeholder="Contoh: TYT-AVZ-001"
+                  value={isEditModalOpen ? editForm.asset_code : addForm.asset_code}
+                  onChange={(e) => isEditModalOpen 
+                    ? setEditForm({...editForm, asset_code: e.target.value})
+                    : setAddForm({ asset_code: e.target.value })
+                  }
                 />
               </div>
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
-                <select 
-                  className="w-full p-3 bg-slate-100 rounded-xl mt-1"
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({...editForm, status: e.target.value})}
-                >
-                  <option value="available">Available</option>
-                  <option value="booked">Booked</option>
-                  <option value="rented">Rented</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-8">
-              <button onClick={() => setIsEditModalOpen(false)} className="flex-1 p-3 bg-slate-100 rounded-xl font-bold">Batal</button>
-              <button onClick={handleUpdate} className="flex-1 p-3 bg-blue-600 text-white rounded-xl font-bold">Simpan</button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* --- IMPLEMENTASI BARU: Modal Tambah --- */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-[2rem] w-full max-w-md shadow-2xl">
-            <h2 className="text-xl font-black mb-4">Tambah Unit Baru</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase">Asset Code</label>
-                <input 
-                  placeholder="Contoh: LN-001"
-                  className="w-full p-3 bg-slate-100 rounded-xl mt-1"
-                  value={addForm.asset_code}
-                  onChange={(e) => setAddForm({ asset_code: e.target.value })}
-                />
-              </div>
+              {isEditModalOpen && (
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Kondisi / Status Unit</label>
+                  <select 
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl mt-2 font-bold outline-none"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                  >
+                    <option value="available">Available (Siap Sewa)</option>
+                    <option value="booked">Booked (Sudah Dipesan)</option>
+                    <option value="rented">Rented (Sedang Disewa)</option>
+                    <option value="maintenance">Maintenance (Perbaikan)</option>
+                  </select>
+                </div>
+              )}
             </div>
-            <div className="flex gap-2 mt-8">
-              <button onClick={() => setIsAddModalOpen(false)} className="flex-1 p-3 bg-slate-100 rounded-xl font-bold">Batal</button>
-              <button onClick={handleAddUnit} className="flex-1 p-3 bg-blue-600 text-white rounded-xl font-bold">Tambah Unit</button>
+
+            <div className="flex gap-3 mt-10">
+              <button 
+                onClick={() => { setIsEditModalOpen(false); setIsAddModalOpen(false); }} 
+                className="flex-1 py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px] tracking-widest"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={isEditModalOpen ? handleUpdate : handleAddUnit} 
+                className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-100"
+              >
+                {isEditModalOpen ? "Simpan Perubahan" : "Konfirmasi Tambah"}
+              </button>
             </div>
           </div>
         </div>

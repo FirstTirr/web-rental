@@ -193,7 +193,7 @@ export function Nav() {
                   </p>
                 </div>
                 <Link
-                  href="/user/profile"
+                  href="/users/profile"
                   className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
                   onClick={() => setProfileOpen(false)}
                 >

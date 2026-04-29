@@ -12,7 +12,6 @@ import {
   returnRental,
 } from "../../../lib/rental-api";
 
-// Definisi Tipe Data
 type TabKey = "pending" | "diterima" | "terlambat" | "ditolak";
 
 type UiRental = {
@@ -32,7 +31,7 @@ type UiRental = {
 const tabStatusMap: Record<TabKey, string[]> = {
   pending: ["pending"],
   diterima: ["approved", "active"],
-  terlambat: ["active"], 
+  terlambat: ["active"],
   ditolak: ["canceled"],
 };
 
@@ -41,7 +40,6 @@ function mapRental(row: any): UiRental {
   const lateFee = Number(row?.late_fee || 0);
   const startDate = String(row?.start_date || "");
   const endDate = String(row?.end_date || "");
-
   return {
     id: Number(row?.id || 0),
     borrower: String(row?.username || `User #${row?.user_id ?? "-"}`),
@@ -57,20 +55,20 @@ function mapRental(row: any): UiRental {
   };
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export default function ValidasiPesanan() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
   const [items, setItems] = useState<UiRental[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
-  // State untuk Modal
   const [selectedRental, setSelectedRental] = useState<UiRental | null>(null);
   const [returnTarget, setReturnTarget] = useState<UiRental | null>(null);
-  
   const [actionLoading, setActionLoading] = useState(false);
   const [returnDate, setReturnDate] = useState("");
   const [returnError, setReturnError] = useState("");
+  const [page, setPage] = useState(1);
 
   const fetchData = useCallback(async () => {
     if (!API_URL) {
@@ -92,15 +90,14 @@ export default function ValidasiPesanan() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  // Logika Filter Tab
+  // Reset page saat tab berubah
+  useEffect(() => { setPage(1); }, [activeTab]);
+
   const displayedItems = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-
     return items.filter((item) => {
-      if (activeTab === "terlambat") {
-        return item.status === "active" && new Date(item.endDate) < now;
-      }
+      if (activeTab === "terlambat") return item.status === "active" && new Date(item.endDate) < now;
       if (activeTab === "diterima") {
         if (item.status === "active") return new Date(item.endDate) >= now;
         return item.status === "approved";
@@ -109,18 +106,27 @@ export default function ValidasiPesanan() {
     });
   }, [items, activeTab]);
 
-  // Fungsi Action Modal
+  const totalPages = Math.ceil(displayedItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = displayedItems.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  const pageNumbers = useMemo(() => {
+    const delta = 2;
+    const range: number[] = [];
+    for (let i = Math.max(1, page - delta); i <= Math.min(totalPages, page + delta); i++) {
+      range.push(i);
+    }
+    return range;
+  }, [page, totalPages]);
+
   const handleAction = async (action: "approve" | "reject") => {
     if (!selectedRental || !API_URL) return;
     setActionLoading(true);
     try {
       const token = getAuthToken();
-      const res = action === "approve" 
-        ? await approveRental(API_URL, token, selectedRental.id) 
+      const res = action === "approve"
+        ? await approveRental(API_URL, token, selectedRental.id)
         : await rejectRental(API_URL, token, selectedRental.id);
-      
       if (!res.response.ok) throw new Error("Gagal melakukan update.");
-      
       setSelectedRental(null);
       await fetchData();
     } catch (err: any) {
@@ -164,12 +170,19 @@ export default function ValidasiPesanan() {
     }
   };
 
+  const lateCount = items.filter(i => i.status === "active" && new Date(i.endDate) < new Date()).length;
+
   return (
     <div className="space-y-8 w-full max-w-6xl mx-auto px-4 py-8 text-slate-900">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tighter italic">Validasi Pesanan</h1>
           <p className="text-slate-500 font-medium">Monitoring status dan keterlambatan unit.</p>
+          {!loading && displayedItems.length > 0 && (
+            <p className="text-sm text-slate-400 font-medium mt-1">
+              Menampilkan {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, displayedItems.length)} dari {displayedItems.length} data
+            </p>
+          )}
         </div>
 
         <div className="flex bg-slate-100 p-1.5 rounded-[1.5rem] w-fit">
@@ -178,27 +191,30 @@ export default function ValidasiPesanan() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                activeTab === tab 
-                ? (tab === 'terlambat' ? "bg-rose-600 text-white shadow-lg" : "bg-white text-slate-900 shadow-sm") 
-                : "text-slate-400 hover:text-slate-600"
+                activeTab === tab
+                  ? (tab === "terlambat" ? "bg-rose-600 text-white shadow-lg" : "bg-white text-slate-900 shadow-sm")
+                  : "text-slate-400 hover:text-slate-600"
               }`}
             >
-              {tab} {tab === 'terlambat' && items.filter(i => i.status === 'active' && new Date(i.endDate) < new Date()).length > 0 && "🚩"}
+              {tab} {tab === "terlambat" && lateCount > 0 && "🚩"}
             </button>
           ))}
         </div>
       </header>
 
-      {/* List Items */}
+      {error && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>
+      )}
+
       <div className="grid gap-5">
         {loading ? (
           <div className="py-24 text-center text-slate-400 font-bold bg-white rounded-[3rem] border border-slate-100">Memuat...</div>
-        ) : displayedItems.length > 0 ? (
-          displayedItems.map((order) => (
-            <div key={order.id} className={`bg-white p-6 rounded-[2rem] border ${activeTab === 'terlambat' ? 'border-rose-200 shadow-rose-100' : 'border-slate-100'} shadow-xl flex flex-col lg:flex-row items-center justify-between gap-6 transition-all`}>
+        ) : paginatedItems.length > 0 ? (
+          paginatedItems.map((order) => (
+            <div key={order.id} className={`bg-white p-6 rounded-[2rem] border ${activeTab === "terlambat" ? "border-rose-200 shadow-rose-100" : "border-slate-100"} shadow-xl flex flex-col lg:flex-row items-center justify-between gap-6 transition-all`}>
               <div className="flex items-center gap-5 w-full lg:w-auto">
-                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-bold ${activeTab === 'terlambat' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-                  {activeTab === 'terlambat' ? '⏰' : '📦'}
+                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-bold ${activeTab === "terlambat" ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-600"}`}>
+                  {activeTab === "terlambat" ? "⏰" : "📦"}
                 </div>
                 <div>
                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">#{order.id}</span>
@@ -208,8 +224,8 @@ export default function ValidasiPesanan() {
               </div>
 
               <div className="flex flex-col lg:items-end text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status {activeTab === 'terlambat' && 'Keterlambatan'}</p>
-                <p className={`text-sm font-black ${activeTab === 'terlambat' ? 'text-rose-600' : 'text-slate-800'}`}>{order.dateRange}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status {activeTab === "terlambat" && "Keterlambatan"}</p>
+                <p className={`text-sm font-black ${activeTab === "terlambat" ? "text-rose-600" : "text-slate-800"}`}>{order.dateRange}</p>
                 <p className="text-sm font-black text-slate-900">{formatIdr(order.total)}</p>
               </div>
 
@@ -219,7 +235,7 @@ export default function ValidasiPesanan() {
                     Validasi
                   </button>
                 ) : (order.status === "active" || order.status === "approved") ? (
-                  <button onClick={() => openReturnModal(order)} className={`w-full px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-white shadow-sm transition-all ${activeTab === 'terlambat' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                  <button onClick={() => openReturnModal(order)} className={`w-full px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-white shadow-sm transition-all ${activeTab === "terlambat" ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
                     Barang Sudah Kembali
                   </button>
                 ) : (
@@ -233,13 +249,59 @@ export default function ValidasiPesanan() {
         )}
       </div>
 
-      {/* MODAL VALIDASI */}
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-4">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            ← Prev
+          </button>
+
+          {pageNumbers[0] > 1 && (
+            <>
+              <button onClick={() => setPage(1)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
+              {pageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
+            </>
+          )}
+
+          {pageNumbers.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={`h-10 w-10 rounded-xl text-sm font-bold transition-all shadow-sm border ${
+                p === page ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {pageNumbers[pageNumbers.length - 1] < totalPages && (
+            <>
+              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
+              <button onClick={() => setPage(totalPages)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalPages}</button>
+            </>
+          )}
+
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
+      {/* Modal Validasi */}
       {selectedRental && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl">
             <h2 className="text-2xl font-black italic tracking-tighter mb-2">Konfirmasi Pesanan</h2>
             <p className="text-slate-500 text-sm font-medium mb-6">Setujui penyewaan dari <span className="text-slate-900 font-bold">{selectedRental.borrower}</span>?</p>
-            
             <div className="flex gap-3">
               <button onClick={() => handleAction("approve")} disabled={actionLoading} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all disabled:opacity-50">
                 {actionLoading ? "..." : "Terima"}
@@ -253,7 +315,7 @@ export default function ValidasiPesanan() {
         </div>
       )}
 
-      {/* MODAL PENGEMBALIAN */}
+      {/* Modal Pengembalian */}
       {returnTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl">

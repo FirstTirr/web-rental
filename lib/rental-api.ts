@@ -217,8 +217,8 @@ export function rentalStatusLabel(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "approved") return { label: "Disetujui", className: "bg-emerald-100 text-emerald-700" };
   if (normalized === "active") return { label: "Aktif", className: "bg-blue-100 text-blue-700" };
-  if (normalized === "completed") return { label: "Selesai", className: "bg-slate-100 text-slate-700" };
-  if (normalized === "overdue") return { label: "Terlambat", className: "bg-rose-100 text-rose-700" };
+  if (normalized === "completed") return { label: "Selesai tepat waktu", className: "bg-slate-100 text-slate-700" };
+  if (normalized === "overdue") return { label: "Selesai Terlambat", className: "bg-rose-100 text-rose-700" };
   if (normalized === "canceled") return { label: "Ditolak", className: "bg-rose-100 text-rose-700" };
   if (normalized === "expired") return { label: "Expired", className: "bg-amber-100 text-amber-700" };
   return { label: "Pending", className: "bg-indigo-100 text-indigo-700" };

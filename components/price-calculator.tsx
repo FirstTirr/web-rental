@@ -1,97 +1,69 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
-// Memuat MapPicker secara dinamis tanpa Server Side Rendering (SSR) karena komponen Leaflet membutuhkan API Browser/Window.
+// Memuat MapPicker secara dinamis tanpa Server Side Rendering (SSR)
 const MapPicker = dynamic(() => import("./map-picker"), { 
   ssr: false, 
-  loading: () => <div className="h-[200px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 border border-slate-200">Memuat Peta Interaktif...</div> 
+  loading: () => <div className="h-[150px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 border border-slate-200">Memuat Peta Interaktif...</div> 
 });
 
 type ProfileApiResult = {
-  data?: {
-    address?: string;
-  };
+  data?: { address?: string; phone?: string; };
   error?: string;
 };
 
-type CreateRentalApiResult = {
-  data?: Record<string, unknown>;
-  message?: string;
-  error?: string;
-};
-
-const PROFILE_ENDPOINT_CANDIDATES = [
-  "/api/users/profile",
-  "/api/profile",
-  "/api/users/profile",
-  "/api/users/me",
-];
-
+const PROFILE_ENDPOINT_CANDIDATES = ["/api/users/profile", "/api/profile", "/api/users/me"];
 const CREATE_RENTAL_ENDPOINT_CANDIDATES = ["/api/rentals"];
 
 async function parseProfileResult(response: Response): Promise<ProfileApiResult> {
   const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return (await response.json()) as ProfileApiResult;
-  }
-
+  if (contentType.includes("application/json")) return (await response.json()) as ProfileApiResult;
   const rawText = await response.text();
-  return {
-    error: rawText?.trim() || `Request gagal dengan status ${response.status}`,
-  };
+  return { error: rawText?.trim() || `Request gagal dengan status ${response.status}` };
 }
 
-async function parseCreateRentalResult(response: Response): Promise<CreateRentalApiResult> {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return (await response.json()) as CreateRentalApiResult;
-  }
-
-  const rawText = await response.text();
-  return {
-    error: rawText?.trim() || `Request gagal dengan status ${response.status}`,
-  };
-}
-
-export function Calculator({ pricePerDay, productName = "Produk", productImage = "", productId = "0" }: { pricePerDay: number, productName?: string, productImage?: string, productId?: string }) {
+export function Calculator({
+  pricePerDay,
+  productId = "0",
+  availableStock = 0,
+}: {
+  pricePerDay: number;
+  productId?: string;
+  availableStock?: number;
+}) {
   const router = useRouter();
+  const [showModal, setShowModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const [days, setDays] = useState<number>(1);
   const [address, setAddress] = useState<string>("");
-  const profileEndpointRef = useRef<string>(PROFILE_ENDPOINT_CANDIDATES[0]);
-  const [minStartDate] = useState<string>(() => {
-    const tzOffset = new Date().getTimezoneOffset() * 60000;
-    return new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
-  });
   const [startDate, setStartDate] = useState<string>(() => {
-    // Default: Hari ini
     const tzOffset = new Date().getTimezoneOffset() * 60000;
     return new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
   });
-  const maxDays = 60; // maksimal perhitungan contoh 2 bulan
 
-  const handleInput = (val: number) => {
-    if (val < 1) val = 1;
-    if (val > maxDays) val = maxDays;
-    setDays(val);
-  };
+  const maxDays = 60;
+  const minStartDate = new Date().toISOString().slice(0, 10);
 
-  const getDiscountData = (d: number) => {
-    if (d >= 30) return { discountLabel: "15% (Sebulan+)", factor: 0.85 };
-    if (d >= 21) return { discountLabel: "7% (3 Minggu+)", factor: 0.93 };
-    if (d >= 14) return { discountLabel: "5% (2 Minggu+)", factor: 0.95 };
-    if (d >= 7) return { discountLabel: "3% (1 Minggu+)", factor: 0.97 };
-    return { discountLabel: "Tidak ada", factor: 1.0 };
-  };
+  // Data Penawaran Diskon sesuai permintaan: 1minggu=3%, 2minggu=5%, 3minggu=7%, 4minggu=15%
+  const discountOffers = [
+    { threshold: 7, label: "1 MINGGU", percent: "3%", factor: 0.97 },
+    { threshold: 14, label: "2 MINGGU", percent: "5%", factor: 0.95 },
+    { threshold: 21, label: "3 MINGGU", percent: "7%", factor: 0.93 },
+    { threshold: 28, label: "4 MINGGU", percent: "15%", factor: 0.85 }, // Menggunakan 28 hari (4 minggu)
+  ];
 
-  const { discountLabel, factor } = getDiscountData(days);
+  // Logika Kalkulasi
+  const activeOffer = [...discountOffers].reverse().find(d => days >= d.threshold);
+  const factor = activeOffer ? activeOffer.factor : 1.0;
+  
   const baseTotal = pricePerDay * days;
   const finalTotal = baseTotal * factor;
   const amountSaved = baseTotal - finalTotal;
 
-  // Tanggal Mulai dan Selesai (hari ini -> hari ini + days)
   const startD = new Date(startDate);
   const endDate = new Date(startD);
   endDate.setDate(startD.getDate() + days);
@@ -100,300 +72,202 @@ export function Calculator({ pricePerDay, productName = "Produk", productImage =
     return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(date);
   };
 
-  const [showModal, setShowModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   function toIdr(num: number) {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
   }
 
   useEffect(() => {
-    let isCancelled = false;
-
     const fetchUserAddress = async () => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) return;
-
       const token = localStorage.getItem("token");
-      if (!token) return;
+      if (!apiUrl || !token) return;
 
-      const endpoints = [
-        profileEndpointRef.current,
-        ...PROFILE_ENDPOINT_CANDIDATES.filter((endpoint) => endpoint !== profileEndpointRef.current),
-      ];
-
-      for (const endpoint of endpoints) {
-        const response = await fetch(`${apiUrl}${endpoint}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const result = await parseProfileResult(response);
-
-        if (response.status === 404) {
-          continue;
-        }
-
-        if (!response.ok) {
-          return;
-        }
-
-        profileEndpointRef.current = endpoint;
-        const userAddress = result?.data?.address?.trim() || "";
-        if (!isCancelled && userAddress) {
-          setAddress((prev) => (prev.trim() ? prev : userAddress));
-        }
-        return;
+      for (const endpoint of PROFILE_ENDPOINT_CANDIDATES) {
+        try {
+          const response = await fetch(`${apiUrl}${endpoint}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const result = await parseProfileResult(response);
+          if (response.ok && result?.data?.address) {
+            setAddress(result.data.address);
+            break;
+          }
+        } catch (e) { console.error(e); }
       }
     };
-
     fetchUserAddress();
-
-    return () => {
-      isCancelled = true;
-    };
   }, []);
 
-  const toApiDate = (value: string) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  };
-
   const createRental = async () => {
+    if (!address.trim()) return alert("Alamat wajib diisi.");
+    setIsSubmitting(true);
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     const token = localStorage.getItem("token");
 
-    if (!address.trim()) {
-      alert("Alamat wajib diisi.");
-      return;
-    }
-
-    if (!apiUrl) {
-      alert("Konfigurasi backend belum tersedia.");
-      return;
-    }
-
     const payload = {
       product_id: Number(productId),
-      start_date: toApiDate(startDate),
-      end_date: toApiDate(new Date(endDate.getTime()).toISOString().slice(0, 10)),
+      start_date: startDate,
+      end_date: new Date(endDate.getTime()).toISOString().slice(0, 10),
     };
 
-    setIsSubmitting(true);
     try {
-      const endpoints = CREATE_RENTAL_ENDPOINT_CANDIDATES;
-      let lastResponse: Response | null = null;
-      let lastResult: CreateRentalApiResult = {};
-
-      for (const endpoint of endpoints) {
-        const response = await fetch(`${apiUrl}${endpoint}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await parseCreateRentalResult(response);
-        lastResponse = response;
-        lastResult = result;
-
-        if (response.status === 404 || response.status === 405) {
-          continue;
-        }
-
-        if (!response.ok) {
-          throw new Error(String(result?.error || "Gagal membuat pesanan."));
-        }
-
-        setShowModal(false);
-        router.push("/user/pesanan");
-        return;
-      }
-
-      // Fallback lokal jika backend belum menyediakan route yang cocok.
-      if (lastResponse && (lastResponse.status === 404 || lastResponse.status === 405)) {
-        const prevOrders = localStorage.getItem("rental_orders");
-        const orders = prevOrders ? JSON.parse(prevOrders) : [];
-
-        const newOrder = {
-          id: Math.random().toString(36).substring(2, 9).toUpperCase(),
-          productId,
-          productName,
-          productImage,
-          days,
-          startDate: formatDate(startD),
-          endDate: formatDate(endDate),
-          address,
-          total: finalTotal,
-          status: "Menunggu Konfirmasi",
-          approvalStatus: "pending",
-          paymentStatus: "unpaid",
-          createdAt: Date.now(),
-        };
-
-        orders.push(newOrder);
-        localStorage.setItem("rental_orders", JSON.stringify(orders));
-        setShowModal(false);
-        router.push("/user/pesanan");
-        return;
-      }
-
-      throw new Error(String(lastResult?.error || "Gagal membuat pesanan."));
+      const response = await fetch(`${apiUrl}${CREATE_RENTAL_ENDPOINT_CANDIDATES[0]}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("Gagal membuat pesanan.");
+      setShowModal(false);
+      router.push("/user/pesanan");
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Gagal membuat pesanan.");
+      alert("Terjadi kesalahan saat memproses pesanan.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const hasStock = availableStock > 0;
+
   return (
-    <div className="my-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="text-lg font-bold text-slate-900 mb-4">Simulasi Harga</h3>
-      <div>
-        <label htmlFor="hari" className="block text-sm font-semibold text-slate-700">Lama Sewa (Hari)</label>
-        <div className="flex items-center gap-4">
-          <input
-            id="hari"
-            type="number"
-            min="1"
-            max={maxDays}
-            value={days}
-            onChange={(e) => handleInput(Number(e.target.value))}
-            className="block w-24 rounded-lg border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-inner outline-none"
-          />
-          <span className="text-sm text-slate-500">Maks. 60 hari online</span>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-4 rounded-xl bg-indigo-50/50 p-4 border border-indigo-100 items-end">
-        <div>
-          <label htmlFor="mulaiPinjam" className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Mulai Pinjam</label>
-          <input 
-            type="date" 
-            id="mulaiPinjam"
-            value={startDate} 
-            onChange={(e) => setStartDate(e.target.value)}
-            min={minStartDate}
-            className="mt-1 w-full flex-1 appearance-none rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
-          />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pengembalian</p>
-          <p className="text-sm font-bold text-slate-800 mt-1 flex h-[34px] items-center px-1">{formatDate(endDate)}</p>
-        </div>
-      </div>
-
-      <div className="mt-6 space-y-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
-        <div className="flex justify-between border-b border-slate-200 pb-2">
-          <span>stock</span>
-        </div>
-        <div className="flex justify-between border-b border-slate-200 pb-2">
-          <span>Harga Dasar ({days} hari)</span>
-          <span className="font-semibold">{toIdr(baseTotal)}</span>
-        </div>
-        <div className="flex justify-between border-b border-slate-200 pb-2">
-          <span>Potongan Durasi <span className="text-xs ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5">{discountLabel}</span></span>
-          <span className="font-semibold text-green-600">- {toIdr(amountSaved)}</span>
-        </div>
-        <div className="flex items-center justify-between pt-2">
-          <span className="font-bold text-slate-900 text-base">Total Bayar</span>
-          <span className="text-xl font-bold text-indigo-700">{toIdr(finalTotal)}</span>
-        </div>
-      </div>
-
-      <div className="mt-8 space-y-4">
-        <div>
-          <label htmlFor="alamat" className="block text-sm font-semibold text-slate-700 mb-2">Alamat Pengiriman / Penggunaan</label>
-          <textarea
-            id="alamat"
-            rows={2}
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Tulis alamat lengkap pengiriman unit atau klik area di peta..."
-            className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm transition-colors duration-200"
-          />
-        </div>
-        
-        <MapPicker addressValue={address} onAddressPicked={(addr) => setAddress(addr)} />
-      </div>
-
-      <button 
-        onClick={() => setShowModal(true)}
-        className="mt-6 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-indigo-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-      >
-        Buat Pesanan ({days} Hari)
-      </button>
-
-      {/* Modal Konfirmasi */}
-      {showModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl overflow-hidden transform scale-100 transition-transform">
-            <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600"></div>
-            
-            <div className="flex justify-between items-start mb-6 mt-2">
-              <h3 className="text-xl font-extrabold text-slate-800">Konfirmasi Pesanan</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-red-500 transition">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+    <div className="flex flex-col gap-10">
+      {/* KARTU RINCIAN PEMBAYARAN */}
+      <div className="rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-sm">
+        <h3 className="text-xl font-bold text-slate-800 mb-6">Rincian Pembayaran</h3>
+        <div className="space-y-4 text-sm">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-50">
+            <span className="text-slate-500 font-medium">Ketersediaan</span>
+            <span className={`font-bold ${hasStock ? "text-emerald-600" : "text-rose-600"}`}>
+              {hasStock ? `${availableStock} Unit Ready` : "Stok Habis"}
+            </span>
+          </div>
+          <div className="flex justify-between items-center pb-3 border-b border-slate-50">
+            <span className="text-slate-500 font-medium">Harga (1 Hari)</span>
+            <span className="font-bold text-slate-800">{toIdr(pricePerDay)}</span>
+          </div>
+          <div className="flex justify-between items-center pb-3 border-b border-slate-50">
+            <span className="text-slate-500 font-medium">Potongan</span>
+            <span className="font-bold text-emerald-600">
+              {amountSaved > 0 ? `- ${toIdr(amountSaved)}` : "Rp0"}
+            </span>
+          </div>
+          <div className="flex justify-between items-center pt-2">
+            <span className="font-bold text-slate-800 text-lg">Total Bayar</span>
+            <div className="text-right">
+              <span className="text-2xl font-black text-slate-900">{toIdr(finalTotal)}</span>
+              <p className="text-[10px] text-slate-400 font-medium italic">*Estimasi {days} hari</p>
             </div>
+          </div>
+        </div>
+        <button 
+          onClick={() => setShowModal(true)}
+          disabled={!hasStock}
+          className="mt-8 w-full rounded-2xl bg-[#00a369] py-4 text-sm font-bold text-white shadow-lg shadow-emerald-100 transition hover:bg-[#008f5d] disabled:bg-slate-200 disabled:shadow-none"
+        >
+          {hasStock ? `Sewa Sekarang` : "Stok Habis"}
+        </button>
+      </div>
 
-            <div className="space-y-4">
-              <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
-                <p className="text-xs uppercase font-semibold text-slate-500 mb-1">Peminjaman</p>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-800">{days} Hari</span>
-                  <span className="text-sm font-medium text-slate-600">{formatDate(startD)} - {formatDate(endDate)}</span>
-                </div>
-              </div>
-              
-              <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
-                <p className="text-xs uppercase font-semibold text-slate-500 mb-1">Lokasi Pengiriman/Penggunaan</p>
-                <p className="font-medium text-slate-800 text-sm leading-relaxed">
-                  {address || <span className="text-red-500 italic">Harap isi alamat lokasi Anda terlebih dahulu!</span>}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-indigo-50 p-4 border border-indigo-100">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-indigo-900">Subtotal</span>
-                  <span className="text-sm font-semibold text-indigo-700">{toIdr(baseTotal)}</span>
-                </div>
-                {amountSaved > 0 && (
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-green-700">Diskon</span>
-                    <span className="text-sm font-semibold text-green-600">- {toIdr(amountSaved)}</span>
+      {/* SECTION DISKON */}
+      <div className="space-y-5">
+        <h4 className="text-lg font-bold text-slate-800 px-1">Penawaran & Ketentuan Diskon</h4>
+        <div className="grid grid-cols-2 gap-4">
+          {discountOffers.map((offer) => {
+            const isActive = activeOffer?.threshold === offer.threshold;
+            return (
+              <div 
+                key={offer.label}
+                className={`relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 ${
+                  isActive 
+                  ? "border-emerald-200 bg-emerald-50 shadow-md ring-2 ring-emerald-500/10" 
+                  : "border-slate-100 bg-white"
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 flex items-center justify-center rounded-bl-xl shadow-sm">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
                   </div>
                 )}
-                <div className="border-t border-indigo-200 my-2 pt-2 flex justify-between items-center">
-                  <span className="font-bold text-indigo-950">Total Bayar</span>
-                  <span className="text-lg font-bold text-indigo-700">{toIdr(finalTotal)}</span>
-                </div>
+                <p className={`text-[10px] font-bold tracking-widest mb-1 ${isActive ? "text-emerald-600" : "text-slate-400"}`}>
+                  {offer.label}
+                </p>
+                <p className={`text-lg font-black ${isActive ? "text-emerald-700" : "text-emerald-600"}`}>
+                  Diskon {offer.percent}
+                </p>
               </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* MODAL TRANSAKSI */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl rounded-[2.5rem] bg-white p-8 shadow-2xl overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-800">Detail Pesanan</h3>
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
             </div>
 
-            <div className="mt-8 flex gap-3">
-              <button 
-                onClick={() => setShowModal(false)}
-                className="w-full rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition"
-              >
-                Batal
-              </button>
-              <button 
-                disabled={!address}
-                onClick={createRental}
-                className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? "Memproses..." : "Konfirmasi"}
-              </button>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-6 rounded-3xl">
+                <div className="col-span-full">
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Lama Sewa (Hari)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={maxDays}
+                    value={days}
+                    onChange={(e) => setDays(Math.max(1, Math.min(maxDays, Number(e.target.value))))}
+                    className="w-24 p-2.5 rounded-xl border border-slate-200 font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Mulai</label>
+                  <input type="date" value={startDate} min={minStartDate} onChange={(e) => setStartDate(e.target.value)} className="w-full p-2.5 rounded-xl border border-slate-200 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Selesai</label>
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700">{formatDate(endDate)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-400 uppercase">Alamat Pengiriman</label>
+                <textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} className="w-full p-4 rounded-2xl border border-slate-100 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Masukkan alamat lengkap..." />
+                <MapPicker addressValue={address} onAddressPicked={(addr) => setAddress(addr)} />
+              </div>
+
+              {/* HARGA DAN DISKON DI DALAM MODAL */}
+              <div className="pt-2 border-t border-dashed border-slate-200">
+                <div className="flex justify-between text-sm py-1">
+                  <span className="text-slate-500">Subtotal ({days} Hari)</span>
+                  <span className="font-semibold text-slate-800">{toIdr(baseTotal)}</span>
+                </div>
+                {amountSaved > 0 && (
+                  <div className="flex justify-between text-sm py-1">
+                    <span className="text-emerald-600 font-medium">Potongan Diskon ({activeOffer?.percent})</span>
+                    <span className="font-semibold text-emerald-600">-{toIdr(amountSaved)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-base font-bold text-slate-800">Total Akhir</span>
+                  <span className="text-xl font-black text-indigo-700">{toIdr(finalTotal)}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 transition">Batal</button>
+                <button disabled={isSubmitting || !address.trim()} onClick={createRental} className="flex-[2] py-4 rounded-2xl bg-[#00a369] text-white font-bold transition hover:bg-[#008f5d] disabled:opacity-50 shadow-lg shadow-emerald-100">
+                  {isSubmitting ? "Memproses..." : "Konfirmasi Pesanan"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

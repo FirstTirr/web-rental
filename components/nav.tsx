@@ -22,7 +22,6 @@ type ProfileApiResult = {
 const PROFILE_ENDPOINT_CANDIDATES = [
   "/api/users/profile",
   "/api/profile",
-  "/api/users/profile",
   "/api/users/me",
 ];
 
@@ -53,49 +52,35 @@ export function Nav() {
     { name: "Produk", href: "/user/product" },
     { name: "Syarat & Ketentuan", href: "/user/terms" },
     { name: "Cek pesanan", href: "/user/pesanan" },
+    { name: "History Pesanan", href: "/user/history" },
+    { name: "Ulasan", href: "/user/reviews" },
   ];
 
-  // Fetch data profile user
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         const token = localStorage.getItem("token");
-        if (!token) return;
-        if (!API_URL) return;
-
-        let lastResult: ProfileApiResult = {};
+        if (!token || !API_URL) return;
 
         for (const endpoint of PROFILE_ENDPOINT_CANDIDATES) {
           const res = await fetch(`${API_URL}${endpoint}`, {
             headers: {
               "Content-Type": "application/json",
-              Accept: "application/json",
               "Authorization": `Bearer ${token}`,
             },
           });
 
+          if (res.status === 404) continue;
+
           const result = await parseProfileResult(res);
-          lastResult = result;
-
-          if (res.status === 404) {
-            continue;
+          if (res.ok && result.data) {
+            const data = result.data;
+            setUser({ 
+              name: data.username || data.name || "User", 
+              email: data.email || "" 
+            });
+            return;
           }
-
-          if (!res.ok) {
-            throw new Error(result?.error || "Gagal mengambil profil.");
-          }
-
-          const data = result?.data || {};
-          const name = data.username || data.name || "";
-          const email = data.email || "";
-          setUser({ name, email });
-          return;
-        }
-
-        if (lastResult?.data) {
-          const name = lastResult.data.username || lastResult.data.name || "";
-          const email = lastResult.data.email || "";
-          setUser({ name, email });
         }
       } catch (err) {
         console.error("Gagal mengambil data profil:", err);
@@ -105,14 +90,12 @@ export function Nav() {
     fetchProfile();
   }, [API_URL]);
 
-  // Fungsi Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
     setProfileOpen(false);
     router.push("/");
   };
 
-  // Close dropdown if clicked outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -123,51 +106,54 @@ export function Nav() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fungsi untuk mendapatkan inisial nama (Contoh: Fathir Adzan -> FA)
   const getInitial = (name: string) => {
-    if (!name) return "US";
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
+    if (!name) return "U";
+    return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   };
 
   return (
-    <header className="animate-fade-in-soft sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        <Link href="/user" className="text-lg font-bold tracking-tight text-indigo-700">
-          RentalHub
-        </Link>
-        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
+      <div className="mx-auto grid h-16 w-full max-w-6xl grid-cols-3 items-center px-4 sm:px-6 lg:px-8">
+        
+        {/* LOGO */}
+        <div className="flex justify-start">
+          <Link href="/user" className="text-lg font-bold text-indigo-700">
+            RentalHub
+          </Link>
+        </div>
+
+        {/* NAVIGASI DESKTOP */}
+        <nav className="hidden items-center justify-center gap-6 text-sm font-medium md:flex">
           {links.map((link) => {
-            const isActive = pathname === link.href || (link.href !== "/user" && pathname.startsWith(link.href));
+            // Perbaikan Logika isActive agar tidak overlap
+            const isActive = pathname === link.href;
             return (
               <Link
                 key={link.name}
                 href={link.href}
-                className={`focus-ring-soft rounded-md px-1 py-0.5 transition hover:text-indigo-700 ${isActive ? "text-indigo-700" : ""}`}
+                className={`relative z-10 px-1 py-1 transition-colors hover:text-indigo-700 ${
+                  isActive ? "text-indigo-700 font-bold" : "text-slate-600"
+                }`}
               >
                 {link.name}
               </Link>
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+
+        {/* PROFILE & MOBILE TRIGGER */}
+        <div className="flex items-center justify-end gap-3">
           <button
-            onClick={() => setMobileOpen((prev) => !prev)}
-            className="btn-soft focus-ring-soft inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-indigo-200 hover:text-indigo-700 md:hidden"
-            aria-label="Buka menu"
-            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 md:hidden"
           >
             {mobileOpen ? (
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <path d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                <path d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
           </button>
@@ -175,35 +161,31 @@ export function Nav() {
           <div className="relative" ref={profileRef}>
             <button
               onClick={() => setProfileOpen(!profileOpen)}
-              className="btn-soft focus-ring-soft flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 transition hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 transition hover:bg-indigo-200"
             >
-              <span className="font-semibold uppercase">
+              <span className="text-xs font-bold uppercase">
                 {user ? getInitial(user.name) : "..."}
               </span>
             </button>
 
             {profileOpen && (
-              <div className="animate-fade-up absolute right-0 mt-2 w-48 origin-top-right rounded-2xl border border-slate-200 bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                <div className="px-4 py-2 border-b border-slate-100 mb-2">
-                  <p className="text-sm font-medium text-slate-900 truncate">
-                    {user?.name || "Memuat..."}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">
-                    {user?.email || "..."}
-                  </p>
+              <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-2 shadow-xl">
+                <div className="px-4 py-2 border-b border-slate-100 mb-1">
+                  <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
                 </div>
                 <Link
                   href="/user/profile"
-                  className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
+                  className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                   onClick={() => setProfileOpen(false)}
                 >
                   Profil Saya
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 font-medium"
+                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-semibold"
                 >
-                  Keluar (Logout)
+                  Logout
                 </button>
               </div>
             )}
@@ -211,25 +193,22 @@ export function Nav() {
         </div>
       </div>
 
+      {/* MOBILE MENU */}
       {mobileOpen && (
-        <div className="border-t border-slate-200/80 bg-white px-4 py-3 md:hidden">
-          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-1 text-sm font-medium text-slate-700">
-            {links.map((link) => {
-              const isActive = pathname === link.href || (link.href !== "/user" && pathname.startsWith(link.href));
-              return (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setProfileOpen(false);
-                  }}
-                  className={`rounded-xl px-3 py-2 transition ${isActive ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50"}`}
-                >
-                  {link.name}
-                </Link>
-              );
-            })}
+        <div className="border-t border-slate-200 bg-white p-4 md:hidden">
+          <nav className="flex flex-col gap-2">
+            {links.map((link) => (
+              <Link
+                key={link.name}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-xl px-4 py-3 text-sm font-medium ${
+                  pathname === link.href ? "bg-indigo-50 text-indigo-700" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {link.name}
+              </Link>
+            ))}
           </nav>
         </div>
       )}

@@ -15,6 +15,9 @@ export default function CategoryManager() {
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
 
+  // State untuk Pop-up
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -50,11 +53,7 @@ export default function CategoryManager() {
   }, [API_URL, getAuthHeaders]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void fetchCategories();
-    }, 0);
-
-    return () => clearTimeout(timer);
+    fetchCategories();
   }, [fetchCategories]);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -69,7 +68,9 @@ export default function CategoryManager() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
+      
       setNewName("");
+      setIsModalOpen(false); // Tutup modal setelah berhasil
       setMessage("Kategori berhasil ditambahkan!");
       fetchCategories();
       setTimeout(() => setMessage(""), 3000);
@@ -122,81 +123,76 @@ export default function CategoryManager() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Manajemen Kategori</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight italic uppercase">Manajemen Kategori</h1>
             <p className="text-slate-500 font-medium text-sm">Kelola kategori produk persewaan Anda</p>
           </div>
           
-          <form onSubmit={handleAdd} className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Nama kategori baru..."
-              className="w-full px-4 py-3 rounded-2xl bg-white border border-slate-200 shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold sm:min-w-[220px] transition-all"
-            />
-            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg shadow-blue-200 transition-all active:scale-95">
-              Tambah
-            </button>
-          </form>
+          {/* Tombol Pemicu Pop-up */}
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200 transition-all active:scale-95 w-full sm:w-auto"
+          >
+            + Tambah Kategori
+          </button>
         </div>
 
         {/* Alert Messages */}
-        {error && <div className="p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-xs font-bold animate-in fade-in slide-in-from-top-2">⚠️ {error}</div>}
-        {message && <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-xs font-bold animate-in fade-in slide-in-from-top-2">✅ {message}</div>}
+        {error && <div className="p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-[10px] font-black uppercase tracking-widest">⚠️ {error}</div>}
+        {message && <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-[10px] font-black uppercase tracking-widest">✅ {message}</div>}
 
         {/* Table Container */}
-        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-4 sm:px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">ID</th>
-                  <th className="px-4 sm:px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Nama Kategori</th>
-                  <th className="px-4 sm:px-8 py-5 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Aksi</th>
+                <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400">
+                  <th className="px-8 py-6 text-left text-[10px] font-black uppercase tracking-widest">ID</th>
+                  <th className="px-8 py-6 text-left text-[10px] font-black uppercase tracking-widest">Nama Kategori</th>
+                  <th className="px-8 py-6 text-right text-[10px] font-black uppercase tracking-widest">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {isLoading ? (
-                  <tr><td colSpan={3} className="px-8 py-10 text-center text-slate-400 font-bold">Memuat data...</td></tr>
+                  <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-400 font-black italic uppercase text-xs animate-pulse">Syncing Database...</td></tr>
                 ) : categories.length === 0 ? (
-                  <tr><td colSpan={3} className="px-8 py-10 text-center text-slate-400 font-bold">Tidak ada kategori ditemukan.</td></tr>
+                  <tr><td colSpan={3} className="px-8 py-20 text-center text-slate-400 font-black italic uppercase text-xs">No records found.</td></tr>
                 ) : (
                   categories.map((cat) => (
                     <tr key={cat.id} className="group hover:bg-blue-50/30 transition-colors">
-                      <td className="px-4 sm:px-8 py-5">
-                        <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">#{cat.id}</span>
+                      <td className="px-8 py-5">
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md">#{cat.id}</span>
                       </td>
-                      <td className="px-4 sm:px-8 py-5">
+                      <td className="px-8 py-5">
                         {editId === cat.id ? (
                           <input
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full p-2 bg-white border border-blue-300 rounded-xl outline-none font-bold text-slate-800 text-sm shadow-sm"
+                            className="w-full max-w-xs p-3 bg-white border-2 border-blue-200 rounded-xl outline-none font-bold text-slate-800 text-sm shadow-inner"
                             autoFocus
                           />
                         ) : (
-                          <span className="text-sm font-bold text-slate-700">{cat.name}</span>
+                          <span className="text-sm font-black text-slate-700 uppercase italic">{cat.name}</span>
                         )}
                       </td>
-                      <td className="px-4 sm:px-8 py-5 text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex justify-end gap-2">
                           {editId === cat.id ? (
                             <>
-                              <button onClick={() => handleUpdate(cat.id)} className="p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-md shadow-emerald-100">
-                                <span className="text-[10px] font-black px-2">SIMPAN</span>
+                              <button onClick={() => handleUpdate(cat.id)} className="p-2 px-4 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all">
+                                <span className="text-[10px] font-black uppercase">Simpan</span>
                               </button>
-                              <button onClick={() => setEditId(null)} className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all">
-                                <span className="text-[10px] font-black px-2">BATAL</span>
+                              <button onClick={() => setEditId(null)} className="p-2 px-4 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all">
+                                <span className="text-[10px] font-black uppercase">Batal</span>
                               </button>
                             </>
                           ) : (
                             <>
-                              <button onClick={() => { setEditId(cat.id); setEditName(cat.name); }} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-600 hover:text-white transition-all">
-                                <span className="text-[10px] font-black px-2">EDIT</span>
+                              <button onClick={() => { setEditId(cat.id); setEditName(cat.name); }} className="p-2 px-4 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-600 hover:text-white transition-all">
+                                <span className="text-[10px] font-black uppercase">Edit</span>
                               </button>
-                              <button onClick={() => handleDelete(cat.id)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-600 hover:text-white transition-all">
-                                <span className="text-[10px] font-black px-2">HAPUS</span>
+                              <button onClick={() => handleDelete(cat.id)} className="p-2 px-4 bg-rose-50 text-rose-400 rounded-xl hover:bg-rose-600 hover:text-white transition-all">
+                                <span className="text-[10px] font-black uppercase">Hapus</span>
                               </button>
                             </>
                           )}
@@ -210,6 +206,62 @@ export default function CategoryManager() {
           </div>
         </div>
       </div>
+
+      {/* --- POP-UP MODAL TAMBAH KATEGORI --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setIsModalOpen(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black italic uppercase tracking-tighter text-slate-900">Tambah Kategori</h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l18 18" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleAdd} className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nama Kategori</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Contoh: Kamera Digital"
+                  className="w-full mt-2 px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm font-bold transition-all shadow-inner"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 px-6 py-4 rounded-2xl bg-blue-600 text-white font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95"
+                >
+                  Simpan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

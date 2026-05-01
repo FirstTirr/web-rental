@@ -1,3 +1,4 @@
+// konfirmasiPembayaran.tsx
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -29,6 +30,7 @@ export default function VerifikasiPembayaranUI() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [completedPayments, setCompletedPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false); // State untuk sinkronisasi transaksi backend
   const [error, setError] = useState("");
   const [activeAction, setActiveAction] = useState<PaymentItem | null>(null);
   const [inputAmount, setInputAmount] = useState("");
@@ -81,8 +83,6 @@ export default function VerifikasiPembayaranUI() {
   }, [API_URL, mapRentalToPayment]);
 
   useEffect(() => { void fetchPayments(); }, [fetchPayments]);
-
-  // Reset page saat tab atau search berubah
   useEffect(() => { setPage(1); }, [currentPage, searchQuery]);
 
   const filteredPayments = useMemo(() => {
@@ -105,33 +105,49 @@ export default function VerifikasiPembayaranUI() {
     return range;
   }, [page, totalPages]);
 
+  // Implementasi ActivateRentalByID dari Backend ke Frontend
   const handleConfirm = async () => {
-    if (!activeAction) return;
+    if (!activeAction || isProcessing) return;
+    
     const currentAction = activeAction;
     const amount = Number(inputAmount);
+
+    // Backend mensyaratkan status 'approved' dan eksekusi transaksi database
     if (amount === currentAction.targetAmount) {
+      setIsProcessing(true);
       try {
         if (!API_URL) throw new Error("Konfigurasi backend belum tersedia.");
         const token = getAuthToken();
+
+        // Menjalankan fungsi yang memicu ActivateRentalByID di backend
         const result = await activateRental(API_URL, token, currentAction.rentalId);
+
         if (!result.response.ok) {
           const payload = result.json as any;
+          // Menangkap ErrRentalNotApproved atau ErrItemInstanceNotFound
           throw new Error(String(payload?.error || "Gagal mengaktifkan rental"));
         }
+
+        // Berhasil Commit di Backend: Update State UI
         setCompletedPayments((prev) => [...prev, { ...currentAction, paidAmount: amount, status: "LUNAS" }]);
         setPayments((prev) => prev.filter((p) => p.id !== currentAction.id));
         setCurrentPage("lunas");
+        
       } catch (err: any) {
-        alert(err?.message || "Gagal memproses pembayaran.");
+        // Menangani Rollback atau kegagalan koneksi
+        alert(err?.message || "Terjadi kesalahan pada transaksi database.");
+      } finally {
+        setIsProcessing(false);
       }
     } else {
-      alert("Pembayaran dicatat sebagai 'Kurang'. Tetap di halaman verifikasi.");
+      alert("Pembayaran harus lunas (sesuai tagihan) untuk mengaktifkan unit.");
     }
     setActiveAction(null);
     setInputAmount("");
   };
 
   function handleClose() {
+    if (isProcessing) return;
     setActiveAction(null);
     setInputAmount("");
   }
@@ -226,14 +242,6 @@ export default function VerifikasiPembayaranUI() {
           >
             ← Prev
           </button>
-
-          {pageNumbers[0] > 1 && (
-            <>
-              <button onClick={() => setPage(1)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
-              {pageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
-            </>
-          )}
-
           {pageNumbers.map((p) => (
             <button
               key={p}
@@ -245,14 +253,6 @@ export default function VerifikasiPembayaranUI() {
               {p}
             </button>
           ))}
-
-          {pageNumbers[pageNumbers.length - 1] < totalPages && (
-            <>
-              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
-              <button onClick={() => setPage(totalPages)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalPages}</button>
-            </>
-          )}
-
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
@@ -263,7 +263,7 @@ export default function VerifikasiPembayaranUI() {
         </div>
       )}
 
-      {/* Modal Validasi */}
+      {/* Modal Validasi - Tersinkronisasi dengan Backend */}
       {activeAction && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-xl" onClick={handleClose} />
@@ -271,42 +271,46 @@ export default function VerifikasiPembayaranUI() {
             <div className="flex justify-between items-start mb-8">
               <div>
                 <h2 className="text-2xl font-black text-slate-900">Validasi Nominal</h2>
-                <p className="text-sm text-slate-500 font-medium">Jangan sampai salah input ya!</p>
+                <p className="text-sm text-slate-500 font-medium">Data akan langsung di-update di database.</p>
               </div>
-              <span className="text-3xl">🎯</span>
+              <span className="text-3xl">{isProcessing ? "⏳" : "🎯"}</span>
             </div>
 
             <div className="space-y-6">
               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-400 uppercase">Harus Dibayar</span>
-                <span className="text-lg font-black text-slate-900">Rp{activeAction.targetAmount.toLocaleString('id-ID')}</span>
+                <span className="text-lg font-black text-slate-900">{formatIdr(activeAction.targetAmount)}</span>
               </div>
               <div>
                 <input
                   type="number"
                   autoFocus
+                  disabled={isProcessing}
                   value={inputAmount}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val <= activeAction.targetAmount) setInputAmount(e.target.value);
-                  }}
+                  onChange={(e) => setInputAmount(e.target.value)}
                   placeholder="Masukkan nominal..."
-                  className="w-full p-6 rounded-[1.5rem] bg-slate-50 border-2 border-slate-100 focus:border-slate-900 focus:outline-none text-2xl font-black transition-all"
+                  className="w-full p-6 rounded-[1.5rem] bg-slate-50 border-2 border-slate-100 focus:border-slate-900 focus:outline-none text-2xl font-black transition-all disabled:opacity-50"
                 />
-                {Number(inputAmount) === activeAction.targetAmount && (
-                  <p className="text-xs font-bold text-emerald-600 mt-3 ml-2">✨ Nominal Pas! Akan otomatis lunas.</p>
+                {Number(inputAmount) === activeAction.targetAmount && !isProcessing && (
+                  <p className="text-xs font-bold text-emerald-600 mt-3 ml-2">✨ Nominal Pas! Aktivasi diizinkan.</p>
                 )}
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-10">
-              <button onClick={handleClose} className="py-5 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all">Batal</button>
+              <button 
+                onClick={handleClose} 
+                disabled={isProcessing}
+                className="py-5 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all disabled:opacity-30"
+              >
+                Batal
+              </button>
               <button
                 onClick={handleConfirm}
-                disabled={!inputAmount || Number(inputAmount) <= 0}
-                className="py-5 rounded-2xl bg-slate-900 text-white font-bold shadow-2xl hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20"
+                disabled={!inputAmount || Number(inputAmount) <= 0 || isProcessing}
+                className="py-5 rounded-2xl bg-slate-900 text-white font-bold shadow-2xl hover:scale-[1.02] active:scale-95 transition-all disabled:bg-slate-400"
               >
-                Konfirmasi
+                {isProcessing ? "Menyimpan..." : "Konfirmasi"}
               </button>
             </div>
           </div>

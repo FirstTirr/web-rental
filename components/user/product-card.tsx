@@ -5,11 +5,14 @@ import Link from 'next/link';
 export default function ProductCard({ product, onDetail }: { product: any, onDetail?: (p: any) => void }) {
   if (!product) return null;
 
-  // LOGIKA STOK: Filter unit yang statusnya 'available'
-  const availableUnits = product.item_instances?.filter((unit: any) => unit.status === 'available').length ?? 0;
+  // Prioritas baca stok dari backend baru (item_instance_count), fallback ke struktur lama.
+  const availableUnits =
+    typeof product.item_instance_count === "number"
+      ? product.item_instance_count
+      : product.item_instances?.filter((unit: any) => unit.status === "available").length ?? 0;
 
   // JIKA STOK 0, JANGAN RENDER CARD (HILANG DARI KATALOG)
-  if (availableUnits === 0 && product.item_instances) return null;
+  if (availableUnits === 0) return null;
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const getImageUrl = (photoUrl: string) => {
@@ -40,9 +43,17 @@ export default function ProductCard({ product, onDetail }: { product: any, onDet
           Rp{Number(product.price_per_day || 0).toLocaleString('id-ID')}
         </p>
         
+        {/* FIX: Tombol Sewa Sekarang menggunakan Link agar bisa diarahkan ke halaman transaksi */}
+        <Link
+          href={`/user/product/${product.id}`}
+          className="block w-full py-3 bg-slate-900 text-white text-center rounded-2xl font-bold text-sm hover:bg-blue-600 transition-all mb-2"
+        >
+          Sewa Sekarang
+        </Link>
+
         <button
           onClick={() => onDetail ? onDetail(product) : null}
-          className="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-blue-600 transition-all"
+          className="w-full py-3 bg-gray-200 text-gray-700 rounded-2xl font-bold text-sm hover:bg-slate-300 transition-all"
         >
           Lihat Detail
         </button>

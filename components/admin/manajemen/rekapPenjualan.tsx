@@ -64,16 +64,20 @@ export default function RekapPenjualan() {
       setTxPage(1);
       setPerfPage(1);
 
-      const validRows = typedRows.filter((row) =>
-        ["active", "completed", "approved", "overdue"].includes(String(row?.rental_status))
-      );
-      const totalRevenue = validRows.reduce(
+      // --- PERBAIKAN LOGIKA DISINI ---
+      // Jangan filter status jika ingin menghitung TOTAL pendapatan dari semua record yang ada
+      const totalRevenue = typedRows.reduce(
         (acc, row) => acc + toNumberValue(row?.rental_fee) + toNumberValue(row?.late_fee), 0
       );
-      const totalLateFees = validRows.reduce(
+
+      const totalLateFees = typedRows.reduce(
         (acc, row) => acc + toNumberValue(row?.late_fee), 0
       );
-      const totalOverdue = typedRows.filter(r => String(r.rental_status) === "overdue").length;
+
+      const totalOverdue = typedRows.filter(r => 
+        String(r.rental_status) === "overdue" || toNumberValue(r.late_fee) > 0
+      ).length;
+
       const totalTransactions = typedRows.length;
 
       setSummaryCards([
@@ -102,28 +106,24 @@ export default function RekapPenjualan() {
       current.total += toNumberValue(row.rental_fee) + toNumberValue(row.late_fee);
       map.set(key, current);
     });
-    return [...map.values()].sort((a, b) => b.jumlah - a.jumlah); // ✅ hapus .slice(0,6)
+    return [...map.values()].sort((a, b) => b.jumlah - a.jumlah);
   }, [rows]);
 
   const metrics = useMemo(() => {
-    const statusCount = rows.reduce<Record<string, number>>((acc, row) => {
-      const key = String(row.rental_status || "pending");
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-    const overdue = statusCount.overdue || 0;
-    const completed = statusCount.completed || 0;
-    const active = statusCount.active || 0;
+    const overdueCount = rows.filter(r => String(r.rental_status) === "overdue" || toNumberValue(r.late_fee) > 0).length;
+    const completedCount = rows.filter(r => String(r.rental_status) === "completed").length;
+    const activeCount = rows.filter(r => String(r.rental_status) === "active").length;
     const total = rows.length || 1;
+
     return [
-      { label: "Status Terlambat", val: String(overdue), color: "bg-rose-500" },
-      { label: "Status Dipinjam", val: String(active), color: "bg-blue-500" },
-      { label: "Status Selesai", val: String(completed), color: "bg-emerald-500" },
-      { label: "Rasio Selesai", val: `${((completed / total) * 100).toFixed(0)}%`, color: "bg-slate-400" },
+      { label: "Status Terlambat", val: String(overdueCount), color: "bg-rose-500" },
+      { label: "Status Dipinjam", val: String(activeCount), color: "bg-blue-500" },
+      { label: "Status Selesai", val: String(completedCount), color: "bg-emerald-500" },
+      { label: "Rasio Selesai", val: `${((completedCount / total) * 100).toFixed(0)}%`, color: "bg-slate-400" },
     ];
   }, [rows]);
 
-  // Pagination: Transaksi
+  // Pagination Logic
   const totalTxPages = Math.ceil(rows.length / TX_PER_PAGE);
   const paginatedRows = rows.slice((txPage - 1) * TX_PER_PAGE, txPage * TX_PER_PAGE);
   const txPageNumbers = useMemo(() => {
@@ -132,7 +132,6 @@ export default function RekapPenjualan() {
     return range;
   }, [txPage, totalTxPages]);
 
-  // Pagination: Produk Terlaris
   const totalPerfPages = Math.ceil(performance.length / PERF_PER_PAGE);
   const paginatedPerf = performance.slice((perfPage - 1) * PERF_PER_PAGE, perfPage * PERF_PER_PAGE);
   const perfPageNumbers = useMemo(() => {
@@ -158,7 +157,6 @@ export default function RekapPenjualan() {
 
       {error && <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>}
 
-      {/* SUMMARY CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {loading ? (
           Array(4).fill(0).map((_, i) => (
@@ -176,7 +174,6 @@ export default function RekapPenjualan() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* PRODUK TERLARIS */}
         <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
           <div className="p-8 border-b border-slate-50 flex justify-between items-center">
             <h3 className="font-black text-slate-800 tracking-tight uppercase text-sm">Produk Terlaris</h3>
@@ -209,56 +206,8 @@ export default function RekapPenjualan() {
               </tbody>
             </table>
           </div>
-
-          {/* Pagination Produk Terlaris */}
-          {totalPerfPages > 1 && (
-            <div className="flex items-center justify-center gap-2 px-8 py-5 border-t border-slate-50">
-              <button
-                onClick={() => setPerfPage((p) => Math.max(1, p - 1))}
-                disabled={perfPage === 1}
-                className="h-9 px-3 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-              >
-                ← Prev
-              </button>
-
-              {perfPageNumbers[0] > 1 && (
-                <>
-                  <button onClick={() => setPerfPage(1)} className="h-9 w-9 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
-                  {perfPageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
-                </>
-              )}
-
-              {perfPageNumbers.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPerfPage(p)}
-                  className={`h-9 w-9 rounded-xl text-xs font-bold transition-all shadow-sm border ${
-                    p === perfPage ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-
-              {perfPageNumbers[perfPageNumbers.length - 1] < totalPerfPages && (
-                <>
-                  {perfPageNumbers[perfPageNumbers.length - 1] < totalPerfPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
-                  <button onClick={() => setPerfPage(totalPerfPages)} className="h-9 w-9 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalPerfPages}</button>
-                </>
-              )}
-
-              <button
-                onClick={() => setPerfPage((p) => Math.min(totalPerfPages, p + 1))}
-                disabled={perfPage === totalPerfPages}
-                className="h-9 px-3 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-              >
-                Next →
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* KESEHATAN RENTAL */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm self-start">
           <h4 className="font-black text-slate-800 text-xs uppercase tracking-widest mb-8">Kesehatan Rental</h4>
           <div className="space-y-8">
@@ -277,7 +226,6 @@ export default function RekapPenjualan() {
         </div>
       </div>
 
-      {/* TABLE TRANSAKSI TERBARU */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-50 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex items-center justify-between">
           <h3 className="font-black text-slate-800 tracking-tight uppercase text-sm">Riwayat Transaksi</h3>
@@ -301,7 +249,7 @@ export default function RekapPenjualan() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {paginatedRows.map((row) => {
-                const badge = rentalStatusLabel(row.rental_status);
+                const badge = rentalStatusLabel(row.rental_status, row.late_fee);
                 const total = toNumberValue(row.rental_fee) + toNumberValue(row.late_fee);
                 return (
                   <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
@@ -323,53 +271,6 @@ export default function RekapPenjualan() {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination Transaksi */}
-        {totalTxPages > 1 && (
-          <div className="flex items-center justify-center gap-2 px-8 py-6 border-t border-slate-50">
-            <button
-              onClick={() => setTxPage((p) => Math.max(1, p - 1))}
-              disabled={txPage === 1}
-              className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-            >
-              ← Prev
-            </button>
-
-            {txPageNumbers[0] > 1 && (
-              <>
-                <button onClick={() => setTxPage(1)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">1</button>
-                {txPageNumbers[0] > 2 && <span className="text-slate-400 font-bold px-1">…</span>}
-              </>
-            )}
-
-            {txPageNumbers.map((p) => (
-              <button
-                key={p}
-                onClick={() => setTxPage(p)}
-                className={`h-10 w-10 rounded-xl text-sm font-bold transition-all shadow-sm border ${
-                  p === txPage ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-
-            {txPageNumbers[txPageNumbers.length - 1] < totalTxPages && (
-              <>
-                {txPageNumbers[txPageNumbers.length - 1] < totalTxPages - 1 && <span className="text-slate-400 font-bold px-1">…</span>}
-                <button onClick={() => setTxPage(totalTxPages)} className="h-10 w-10 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">{totalTxPages}</button>
-              </>
-            )}
-
-            <button
-              onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
-              disabled={txPage === totalTxPages}
-              className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-            >
-              Next →
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

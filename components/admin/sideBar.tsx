@@ -6,12 +6,12 @@ import { useState } from 'react';
 
 const menuItems = [
   { id: 'dashboard', label: "Dashboard", path: "/admin" },
-  { id: 'barang', label: "CRUD Barang", path: "/admin/barang" },
+  { id: 'validasi', label: "Validasi Pesanan", path: "/admin/validasi" },
+  { id: 'konfirmasi', label: "Konfirmasi Pembayaran", path: "/admin/pembayaran-page" },
   { id: 'category', label: "Manajemen Kategori", path: "/admin/category" },
+  { id: 'barang', label: "CRUD Barang", path: "/admin/barang" },
   { id: 'rekap', label: "Rekap Penjualan", path: "/admin/rekap" },
   { id: 'pesanan', label: "Log Pesanan", path: "/admin/log-pesanan" },
-  { id: 'konfirmasi', label: "Konfirmasi Pembayaran", path: "/admin/pembayaran-page" },
-  { id: 'validasi', label: "Validasi Pesanan", path: "/admin/validasi" },
 ];
 
 export default function SideBar() {
@@ -74,7 +74,7 @@ export default function SideBar() {
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
           </svg>
-          <span className="font-black text-sm tracking-wide uppercase">Keluar Akun</span>
+          <span className="font-black text-sm tracking-wide uppercase">Logout</span>
         </button>
       </div>
     </>

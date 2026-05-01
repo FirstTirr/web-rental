@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation'; // Tambahkan useRouter
+import { useRouter } from 'next/navigation';
 import CrudBarang from './crudBarang';
 
 export default function ProductTable() {
-  const router = useRouter(); // Inisialisasi router
+  const router = useRouter();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalConfig, setModalConfig] = useState<{
@@ -28,7 +28,7 @@ export default function ProductTable() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token"); // Token diambil dari localStorage sesuai koreksimu
+      const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/products?limit=100`, {
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -57,12 +57,12 @@ export default function ProductTable() {
     <div className="p-4 md:p-8">
       <div className='flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4'>
         <div>
-          <h1 className='text-3xl font-black text-slate-900 tracking-tighter'>Manajemen Barang</h1>
-          <p className='text-slate-500 font-medium'>Level ini hanya menampilkan daftar produk. Klik barang untuk mengelola unit fisik.</p>
+          <h1 className='text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter italic uppercase'>Manajemen Barang</h1>
+          <p className='text-slate-500 font-medium italic'>Kelola katalog produk utama dan unit fisik yang tersedia.</p>
         </div>
         <button 
           onClick={() => setModalConfig({ isOpen: true, mode: 'tambah' })}
-          className='py-3 px-6 bg-blue-600 rounded-2xl text-white font-bold hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95'
+          className='py-3 px-8 bg-blue-600 rounded-2xl text-white font-black text-xs uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95'
         >
           + Tambah Produk
         </button>
@@ -83,9 +83,9 @@ export default function ProductTable() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={6} className="p-20 text-center text-slate-400 font-bold italic animate-pulse">Menghubungkan ke database...</td></tr>
+                <tr><td colSpan={6} className="p-20 text-center text-slate-400 font-bold italic animate-pulse uppercase tracking-widest">Syncing Database...</td></tr>
               ) : products.length === 0 ? (
-                <tr><td colSpan={6} className="p-20 text-center text-slate-400 font-bold">Belum ada produk terdaftar.</td></tr>
+                <tr><td colSpan={6} className="p-20 text-center text-slate-400 font-bold italic uppercase tracking-widest">Belum ada produk terdaftar.</td></tr>
               ) : products.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/50 transition-all group">
                   <td className="p-6">
@@ -106,9 +106,9 @@ export default function ProductTable() {
                       <span className="bg-blue-50 px-2 py-1 rounded-md">ID-{p.id}</span>
                   </td>
                   <td className="p-6">
-                    <p className="font-black text-slate-800 text-base leading-tight">{p.name}</p>
+                    <p className="font-black text-slate-800 text-base leading-tight uppercase">{p.name}</p>
                   </td>
-                  <td className="p-6 font-black text-slate-900">
+                  <td className="p-6 font-black text-slate-900 uppercase">
                       {p.category?.name || p.category_name || "General"}
                   </td>
                   <td className="p-6 font-black text-slate-900">
@@ -116,22 +116,24 @@ export default function ProductTable() {
                   </td>
                   <td className="p-6">
                     <div className="flex justify-center gap-2">
-                      {/* TOMBOL BARANG BARU */}
                       <button 
                         onClick={() => router.push(`/admin/barang/${p.id}`)}
-                        className="p-2 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                        className="p-2 px-4 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95"
                       >
-                        Barang
+                        Unit
                       </button>
+                      
+                      {/* GANTI DETAIL JADI EDIT */}
                       <button 
-                        onClick={() => setModalConfig({ isOpen: true, mode: 'detail', data: p })}
-                        className="p-2 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-blue-600 transition-all active:scale-95"
+                        onClick={() => setModalConfig({ isOpen: true, mode: 'edit', data: p })}
+                        className="p-2 px-4 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95"
                       >
-                        Detail
+                        Edit
                       </button>
+
                       <button 
                         onClick={() => setModalConfig({ isOpen: true, mode: 'hapus', data: p })}
-                        className="p-2 px-4 rounded-xl bg-rose-50 text-rose-500 text-xs font-bold hover:bg-rose-100 transition-all active:scale-95"
+                        className="p-2 px-4 rounded-xl bg-rose-50 text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all active:scale-95"
                       >
                         Hapus
                       </button>

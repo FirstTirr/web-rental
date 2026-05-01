@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import LoadingScreen from "../LoadingScreen";
 import { 
   fetchRentalReport, 
+  fetchAdminReviews,
   formatIdr, 
   getAuthToken, 
   rentalStatusLabel 
@@ -18,6 +19,7 @@ export default function Dashboard({ activeTab, setActiveTab }: { activeTab: stri
   
   // State untuk data murni dari API
   const [rawData, setRawData] = useState<any[]>([]);
+  const [latestReviews, setLatestReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const toNumber = (val: any) => Number(val || 0);
@@ -29,11 +31,16 @@ export default function Dashboard({ activeTab, setActiveTab }: { activeTab: stri
       try {
         const token = getAuthToken();
         // Menggunakan fetchRentalReport agar konsisten dengan halaman Rekap
-        const { rows } = await fetchRentalReport(API_URL, token);
+        const [{ rows }, { rows: reviews }] = await Promise.all([
+          fetchRentalReport(API_URL, token),
+          fetchAdminReviews(API_URL, token, { page: 1, limit: 5 }),
+        ]);
         setRawData(Array.isArray(rows) ? rows : []);
+        setLatestReviews(Array.isArray(reviews) ? reviews : []);
       } catch (error) {
         console.error("Dashboard error:", error);
         setRawData([]);
+        setLatestReviews([]);
       } finally {
         setLoading(false);
       }
@@ -143,6 +150,26 @@ export default function Dashboard({ activeTab, setActiveTab }: { activeTab: stri
                      )
                    }) : <p className="text-slate-400 text-center py-4 font-bold italic text-sm">Belum ada pesanan.</p>}
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="font-black text-lg sm:text-xl text-slate-800">Ulasan Terbaru Pengguna</h3>
+              </div>
+              <div className="space-y-4">
+                {latestReviews.length > 0 ? latestReviews.map((review) => (
+                  <div key={review.id} className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">{review.username}</p>
+                        <p className="text-xs text-slate-500">{review.product_name}</p>
+                      </div>
+                      <p className="text-amber-500 text-sm font-black">{"★".repeat(Math.max(1, Number(review.rating || 0)))}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-700">{review.comment || "-"}</p>
+                  </div>
+                )) : <p className="text-slate-400 text-center py-4 font-bold italic text-sm">Belum ada ulasan.</p>}
               </div>
             </div>
           </div>

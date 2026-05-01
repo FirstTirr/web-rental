@@ -46,6 +46,28 @@ export interface RentalMonthlySummary {
 
 type JsonRecord = Record<string, unknown>;
 
+export interface ReviewPayload {
+  rating: number;
+  comment?: string;
+}
+
+export interface AdminReviewRow {
+  id: number;
+  username: string;
+  product_name: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+}
+
+export interface UserReviewRow {
+  id: number;
+  product_name: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+}
+
 const DEFAULT_HEADERS: HeadersInit = {
   "Content-Type": "application/json",
   "Accept": "application/json",
@@ -188,6 +210,103 @@ export async function cancelRental(apiUrl: string, token: string | null, rentalI
   return mutateRentalStatus(apiUrl, token, `/api/rentals/${rentalId}/cancel`);
 }
 
+export async function createReview(apiUrl: string, token: string | null, rentalId: number, payload: ReviewPayload) {
+  const candidates = [
+    `/api/rentals/${rentalId}/review`,
+    `/api/rentals/${rentalId}/reviews`,
+  ].map((path) => ({
+    url: `${apiUrl}${path}`,
+    init: {
+      method: "POST",
+      headers: buildAuthHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  }));
+
+  return requestWithFallback(candidates);
+}
+
+export async function fetchAdminReviews(apiUrl: string, token?: string | null, params?: { page?: number; limit?: number }) {
+  const search = new URLSearchParams();
+  if (typeof params?.page === "number") search.set("page", String(params.page));
+  if (typeof params?.limit === "number") search.set("limit", String(params.limit));
+  const query = search.toString();
+
+  const candidates = [`/api/reviews${query ? `?${query}` : ""}`].map((path) => ({
+    url: `${apiUrl}${path}`,
+    init: { method: "GET", headers: buildAuthHeaders(token) },
+  }));
+
+  const result = await requestWithFallback(candidates);
+  const rows = Array.isArray(result.json.data)
+    ? result.json.data as AdminReviewRow[]
+    : Array.isArray(result.json)
+      ? result.json as unknown as AdminReviewRow[]
+      : [];
+  return { rows, response: result.response };
+}
+
+/**
+ * FIXED: Mengubah urutan agar memprioritaskan endpoint PRIVATE user.
+ * Menghapus /api/reviews dari daftar ini agar tidak mengambil data publik.
+ */
+export async function fetchMyReviews(apiUrl: string, token?: string | null, params?: { page?: number; limit?: number }) {
+  const search = new URLSearchParams();
+  if (typeof params?.page === "number") search.set("page", String(params.page));
+  if (typeof params?.limit === "number") search.set("limit", String(params.limit));
+  const query = search.toString();
+
+  const candidates = [
+    `/api/users/me/reviews${query ? `?${query}` : ""}`,
+    `/api/my/reviews${query ? `?${query}` : ""}`,
+    `/api/rentals/me/reviews${query ? `?${query}` : ""}`,
+  ].map((path) => ({
+    url: `${apiUrl}${path}`,
+    init: { method: "GET", headers: buildAuthHeaders(token) },
+  }));
+
+  const result = await requestWithFallback(candidates);
+  const rows = Array.isArray(result.json.data)
+    ? result.json.data as UserReviewRow[]
+    : Array.isArray(result.json)
+      ? result.json as unknown as UserReviewRow[]
+      : [];
+  return { rows, response: result.response };
+}
+
+export async function updateMyReview(apiUrl: string, token: string | null, reviewId: number, payload: ReviewPayload) {
+  const candidates = [
+    `/api/users/me/reviews/${reviewId}`, // Prioritas endpoint privat
+    `/api/my/reviews/${reviewId}`,
+    `/api/reviews/${reviewId}`,
+  ].map((path) => ({
+    url: `${apiUrl}${path}`,
+    init: {
+      method: "PUT",
+      headers: buildAuthHeaders(token),
+      body: JSON.stringify(payload),
+    },
+  }));
+
+  return requestWithFallback(candidates);
+}
+
+export async function deleteMyReview(apiUrl: string, token: string | null, reviewId: number) {
+  const candidates = [
+    `/api/users/me/reviews/${reviewId}`, // Prioritas endpoint privat
+    `/api/my/reviews/${reviewId}`,
+    `/api/reviews/${reviewId}`,
+  ].map((path) => ({
+    url: `${apiUrl}${path}`,
+    init: {
+      method: "DELETE",
+      headers: buildAuthHeaders(token),
+    },
+  }));
+
+  return requestWithFallback(candidates);
+}
+
 export function formatIdr(value: string | number | null | undefined) {
   const numeric = typeof value === "string" ? Number(value) : value ?? 0;
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number.isFinite(numeric as number) ? Number(numeric) : 0);
@@ -213,13 +332,20 @@ export function getRentalDurationDays(startDate: string | Date, endDate: string 
   return Math.max(days, 1);
 }
 
-export function rentalStatusLabel(status: string) {
+export function rentalStatusLabel(status: string, lateFee?: string | number) {
   const normalized = status.toLowerCase();
+  const hasLateFee = Number(lateFee || 0) > 0;
+
+  if (hasLateFee) {
+    return { label: "Selesai Terlambat", className: "bg-rose-100 text-rose-700" };
+  }
+
   if (normalized === "approved") return { label: "Disetujui", className: "bg-emerald-100 text-emerald-700" };
   if (normalized === "active") return { label: "Aktif", className: "bg-blue-100 text-blue-700" };
   if (normalized === "completed") return { label: "Selesai tepat waktu", className: "bg-slate-100 text-slate-700" };
   if (normalized === "overdue") return { label: "Selesai Terlambat", className: "bg-rose-100 text-rose-700" };
   if (normalized === "canceled") return { label: "Ditolak", className: "bg-rose-100 text-rose-700" };
   if (normalized === "expired") return { label: "Expired", className: "bg-amber-100 text-amber-700" };
+  
   return { label: "Pending", className: "bg-indigo-100 text-indigo-700" };
 }

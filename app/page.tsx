@@ -14,6 +14,7 @@ interface ProductItem {
 export default async function Home() {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   let products: ProductItem[] = [];
+  let testimonials: Array<{ id: number; username: string; product_name: string; rating: number; comment: string }> = [];
 
   // 1. Fetch data dari API
   if (backendUrl) {
@@ -28,6 +29,28 @@ export default async function Home() {
       }
     } catch (err) {
       console.error("Gagal mengambil data API:", err);
+    }
+  }
+
+  if (backendUrl) {
+    const reviewEndpoints = [
+      `${backendUrl}/api/reviews?limit=6&page=1`,
+      `${backendUrl}/api/admin/reviews?limit=6&page=1`,
+    ];
+
+    for (const endpoint of reviewEndpoints) {
+      try {
+        const resReview = await fetch(endpoint, { cache: "no-store" });
+        if (!resReview.ok) continue;
+        const json = await resReview.json();
+        const rows = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+        if (rows.length > 0) {
+          testimonials = rows;
+          break;
+        }
+      } catch {
+        continue;
+      }
     }
   }
 
@@ -151,6 +174,26 @@ export default async function Home() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-4 py-20">
+        <div className="mb-12 text-center">
+          <h2 className="text-4xl font-black tracking-tighter uppercase italic">Apa Kata Penyewa</h2>
+          <p className="mt-3 font-medium text-slate-500 italic">Ulasan asli dari pengguna yang sudah menyelesaikan transaksi rental.</p>
+        </div>
+        {testimonials.length === 0 ? (
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 text-center text-slate-400 font-bold uppercase text-sm">Belum ada ulasan terbaru.</div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {testimonials.slice(0, 6).map((review) => (
+              <div key={review.id} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">{review.username || "Penyewa"} • {review.product_name || "Produk"}</p>
+                <p className="mt-2 text-amber-500 font-black">{Array.from({ length: Number(review.rating || 0) }).map((_, i) => <span key={i}>★</span>)}</p>
+                <p className="mt-3 text-sm font-medium text-slate-700 italic">{review.comment || "User tidak menambahkan komentar."}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Footer / CTA */}

@@ -58,12 +58,6 @@ function mapRental(row: any): UiRental {
 
 const ITEMS_PER_PAGE = 10;
 
-const toLocalDay = (value: string) => {
-  const date = new Date(`${value}T00:00:00`);
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
-
 export default function ValidasiPesanan() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
@@ -215,9 +209,17 @@ export default function ValidasiPesanan() {
           paginatedItems.map((order) => {
             const now = new Date();
             now.setHours(0, 0, 0, 0);
+
             const isActive = order.status === "active";
+            const isApproved = order.status === "approved";
             const isCanceled = order.status === "canceled";
             const isDenied = order.status === "denied";
+
+            // LOGIKA: Syarat tombol benar-benar aktif (bisa diklik)
+            // 1. Status harus 'active' (sudah bayar/ambil)
+            // 2. Tanggal hari ini sudah masuk periode sewa (startDate)
+            const isStarted = new Date(order.startDate) <= now;
+            const canAction = isActive && isStarted;
             
             const currentLate = estimateLateFee(order, now.toISOString().slice(0, 10));
 
@@ -230,7 +232,11 @@ export default function ValidasiPesanan() {
                   <div>
                     <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">#{order.id}</span>
                     <h3 className="text-lg font-black text-slate-800 leading-tight">{order.borrower}</h3>
-                    <p className="text-sm text-slate-500 font-medium">{order.unit} {isActive && <span className="text-emerald-500 ml-1 italic">● Sedang Digunakan</span>}</p>
+                    <p className="text-sm text-slate-500 font-medium">
+                        {order.unit} 
+                        {isActive && <span className="text-emerald-500 ml-1 italic font-bold">● Sedang Digunakan</span>}
+                        {isApproved && !isActive && <span className="text-amber-500 ml-1 italic font-bold">● Menunggu Pengambilan</span>}
+                    </p>
                   </div>
                 </div>
 
@@ -256,18 +262,19 @@ export default function ValidasiPesanan() {
                     </span>
                   ) : activeTab === "pending" ? (
                     <button onClick={() => setSelectedRental(order)} className="w-full px-8 py-3 rounded-2xl bg-slate-900 text-white font-bold hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">VALIDASI</button>
-                  ) : isActive || order.status === "approved" ? (
+                  ) : isApproved || isActive ? (
                     <button 
                       onClick={() => openReturnModal(order)} 
+                      disabled={!canAction}
                       className={`w-full px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-all 
-                        ${!isActive
-                          ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200 shadow-lg" 
+                        ${!canAction
+                          ? "bg-amber-500/40 text-white/80 cursor-not-allowed grayscale" 
                           : activeTab === "terlambat" 
                             ? "bg-rose-600 hover:bg-rose-700 shadow-rose-200 shadow-lg" 
                             : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 shadow-lg"
                         }`}
                     >
-                      {!isActive ? "Selesaikan (Belum Aktif)" : "Selesaikan Pesanan"}
+                      {canAction ? "Selesaikan Pesanan" : "Selesaikan (Belum Aktif)"}
                     </button>
                   ) : (
                     <span className="text-[10px] font-black uppercase px-4 py-2 bg-slate-50 text-slate-400 rounded-full">Locked</span>
@@ -281,6 +288,7 @@ export default function ValidasiPesanan() {
         )}
       </div>
 
+      {/* Pagination & Modals (Same as before) */}
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
           <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition-all">← PREV</button>

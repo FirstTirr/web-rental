@@ -116,10 +116,10 @@ export default function RekapPenjualan() {
     const total = rows.length || 1;
 
     return [
-      { label: "Status Terlambat", val: String(overdueCount), color: "bg-rose-500" },
-      { label: "Status Dipinjam", val: String(activeCount), color: "bg-blue-500" },
-      { label: "Status Selesai", val: String(completedCount), color: "bg-emerald-500" },
-      { label: "Rasio Selesai", val: `${((completedCount / total) * 100).toFixed(0)}%`, color: "bg-slate-400" },
+      { label: "Selesai Terlambat", val: String(overdueCount), color: "bg-rose-500" },
+      // { label: "Status Dipinjam", val: String(activeCount), color: "bg-blue-500" },
+      { label: "Selesai Tepat Waktu", val: String(completedCount), color: "bg-emerald-500" },
+      { label: "Rasio Selesai Tepat Waktu", val: `${((completedCount / total) * 100).toFixed(0)}%`, color: "bg-slate-400" },
     ];
   }, [rows]);
 

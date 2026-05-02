@@ -28,12 +28,13 @@ type UiRental = {
   lateFee: number;
 };
 
+// FIX 1: Pemisahan status yang tegas antara ditolak admin dan dibatalkan user
 const tabStatusMap: Record<TabKey, string[]> = {
-  pending: ["pending"],
+  pending: ["pending", "waiting"],
   diterima: ["approved", "active"],
   terlambat: ["active"],
-  ditolak: ["denied"], 
-  canceled: ["canceled"],
+  ditolak: ["denied", "rejected"], // Hanya untuk penolakan admin
+  canceled: ["canceled", "cancelled"], // Hanya untuk pembatalan user
 };
 
 function mapRental(row: any): UiRental {
@@ -47,7 +48,7 @@ function mapRental(row: any): UiRental {
     unit: String(row?.product_name || "Produk"),
     dateRange: `${formatDate(startDate)} - ${formatDate(endDate)}`,
     total: rentalFee + lateFee,
-    status: String(row?.rental_status || "pending"),
+    status: String(row?.rental_status || "pending").toLowerCase(),
     createdAt: String(row?.created_at || ""),
     startDate,
     endDate,
@@ -92,15 +93,19 @@ export default function ValidasiPesanan() {
   useEffect(() => { void fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); }, [activeTab]);
 
+  // FIX 2: Logika filter yang memastikan item 'denied' tidak masuk ke tab 'canceled'
   const displayedItems = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     return items.filter((item) => {
-      if (activeTab === "terlambat") return item.status === "active" && new Date(item.endDate) < now;
+      if (activeTab === "terlambat") {
+        return item.status === "active" && new Date(item.endDate) < now;
+      }
       if (activeTab === "diterima") {
         if (item.status === "active") return new Date(item.endDate) >= now;
         return item.status === "approved";
       }
+      // Menggunakan mapping yang sudah diperbaiki di atas
       return new Set(tabStatusMap[activeTab]).has(item.status);
     });
   }, [items, activeTab]);
@@ -212,12 +217,9 @@ export default function ValidasiPesanan() {
 
             const isActive = order.status === "active";
             const isApproved = order.status === "approved";
-            const isCanceled = order.status === "canceled";
-            const isDenied = order.status === "denied";
+            const isCanceled = ["canceled", "cancelled"].includes(order.status);
+            const isDenied = ["denied", "rejected"].includes(order.status);
 
-            // LOGIKA: Syarat tombol benar-benar aktif (bisa diklik)
-            // 1. Status harus 'active' (sudah bayar/ambil)
-            // 2. Tanggal hari ini sudah masuk periode sewa (startDate)
             const isStarted = new Date(order.startDate) <= now;
             const canAction = isActive && isStarted;
             
@@ -245,6 +247,7 @@ export default function ValidasiPesanan() {
                     {isCanceled || isDenied ? "Status Akhir" : `Jadwal ${activeTab === "terlambat" ? "Harus Kembali" : "Sewa"}`}
                   </p>
                   <p className={`text-sm font-black ${isCanceled || isDenied || activeTab === "terlambat" ? "text-rose-600" : "text-slate-800"}`}>
+                    {/* FIX 3: Label dinamis sesuai status database asli */}
                     {isCanceled ? "DIBATALKAN USER" : isDenied ? "DITOLAK ADMIN" : order.dateRange}
                   </p>
                   <div className="flex flex-col">
@@ -257,7 +260,7 @@ export default function ValidasiPesanan() {
 
                 <div className="flex gap-3 w-full lg:w-auto">
                   {isCanceled || isDenied ? (
-                    <span className="text-[10px] font-black uppercase px-6 py-3 border border-rose-100 bg-rose-50 text-rose-500 rounded-full italic">
+                    <span className={`text-[10px] font-black uppercase px-6 py-3 border rounded-full italic ${isDenied ? "bg-rose-50 text-rose-500 border-rose-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}>
                       {isDenied ? "Rejected Record" : "Canceled Record"}
                     </span>
                   ) : activeTab === "pending" ? (
@@ -288,7 +291,7 @@ export default function ValidasiPesanan() {
         )}
       </div>
 
-      {/* Pagination & Modals (Same as before) */}
+      {/* Pagination & Modals */}
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 pt-4">
           <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="h-10 px-4 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition-all">← PREV</button>

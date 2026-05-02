@@ -40,7 +40,7 @@ export default function SideBar() {
     <>
       <div className="flex items-center gap-3 mb-8 px-2">
         <div className="h-8 w-8 bg-blue-500 rounded-xl rotate-12 shadow-lg shadow-blue-500/50" />
-        <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase leading-tight">Rental.in Admin</h2>
+        <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase leading-tight">RentalHub Admin</h2>
       </div>
 
       <nav className="flex-1 space-y-2 overflow-y-auto pr-1">
@@ -85,7 +85,7 @@ export default function SideBar() {
     <>
       {/* Header Mobile */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
-        <h2 className="text-base font-black tracking-tight text-slate-900">Rental.in Admin</h2>
+        <h2 className="text-base font-black tracking-tight text-slate-900">RentalHub Admin</h2>
         <button
           onClick={() => setIsOpen(true)}
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"
